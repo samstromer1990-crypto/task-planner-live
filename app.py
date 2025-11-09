@@ -159,6 +159,8 @@ def send_reminder_email(task_name, reminder_time):
         return False
 
 # ---------------------- Reminder Job ----------------------
+from datetime import datetime, timezone, timedelta
+
 def notify_due_tasks():
     IST_OFFSET = timedelta(hours=5, minutes=30)
 
@@ -177,22 +179,31 @@ def notify_due_tasks():
             continue
 
         try:
-            # Convert stored Airtable datetime into IST for comparison
             reminder_time = datetime.fromisoformat(reminder.replace("Z", "")).replace(tzinfo=timezone.utc) + IST_OFFSET
         except:
             continue
 
-        # If reminder time has passed and not notified recently
-        if reminder_time <= now_ist:
-            # Send email
+        # Prevent duplicate sends (ignore if last notification was within 5 minutes)
+        if last_notified:
+            try:
+                last_time = datetime.fromisoformat(last_notified.replace("Z", "")).replace(tzinfo=timezone.utc) + IST_OFFSET
+                if (now_ist - last_time) < timedelta(minutes=5):
+                    continue
+            except:
+                pass
+
+        # Allow a 5-minute window to catch reminder
+        time_difference = now_ist - reminder_time
+        if timedelta(0) <= time_difference <= timedelta(minutes=5):
             send_reminder_email(fields.get("Task Name", "Task"), reminder_time.strftime("%Y-%m-%d %H:%M"))
 
-            # Update last notified time
+            # mark notification in Airtable
             requests.patch(
                 f"{airtable_url()}/{rec['id']}",
                 json={"fields": {"Last Notified At": now_utc.isoformat()}},
                 headers=at_headers(json=True)
             )
+
 
 @app.route("/test-reminder")
 def test_reminder():
@@ -279,5 +290,6 @@ scheduler.start()
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000, host="0.0.0.0")
+
 
 
