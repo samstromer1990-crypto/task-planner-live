@@ -160,26 +160,39 @@ def send_reminder_email(task_name, reminder_time):
 
 # ---------------------- Reminder Job ----------------------
 def notify_due_tasks():
-    formula = """
-    AND(
-      {Completed}=0,
-      {Reminder Local} <= NOW(),
-      OR(
-        {Last Notified At}=BLANK(),
-        DATETIME_DIFF(NOW(), {Last Notified At}, 'minutes') >= 1
-      )
-    )
-    """
-    params = {"filterByFormula": formula.replace("\n", "")}
-    records = requests.get(airtable_url(), headers=at_headers(), params=params).json().get("records", [])
+    IST_OFFSET = timedelta(hours=5, minutes=30)
+
+    now_utc = datetime.now(timezone.utc)
+    now_ist = now_utc + IST_OFFSET
+
+    records = requests.get(airtable_url(), headers=at_headers()).json().get("records", [])
 
     for rec in records:
-        task_name = rec["fields"].get("Task Name", "Task")
-        reminder_time = rec["fields"].get("Reminder Local", "")
+        fields = rec.get("fields", {})
+        completed = fields.get("Completed", False)
+        reminder = fields.get("Reminder Local")
+        last_notified = fields.get("Last Notified At")
 
-        send_reminder_email(task_name, reminder_time)
+        if not reminder or completed:
+            continue
 
-        requests.patch(f"{airtable_url()}/{rec['id']}", json={"fields": {"Last Notified At": datetime.now(timezone.utc).isoformat()}}, headers=at_headers(json=True))
+        try:
+            # Convert stored Airtable datetime into IST for comparison
+            reminder_time = datetime.fromisoformat(reminder.replace("Z", "")).replace(tzinfo=timezone.utc) + IST_OFFSET
+        except:
+            continue
+
+        # If reminder time has passed and not notified recently
+        if reminder_time <= now_ist:
+            # Send email
+            send_reminder_email(fields.get("Task Name", "Task"), reminder_time.strftime("%Y-%m-%d %H:%M"))
+
+            # Update last notified time
+            requests.patch(
+                f"{airtable_url()}/{rec['id']}",
+                json={"fields": {"Last Notified At": now_utc.isoformat()}},
+                headers=at_headers(json=True)
+            )
 
 @app.route("/test-reminder")
 def test_reminder():
@@ -266,4 +279,5 @@ scheduler.start()
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000, host="0.0.0.0")
+
 
