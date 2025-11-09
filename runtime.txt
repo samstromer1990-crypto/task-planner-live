@@ -1,5 +1,1 @@
-flask
-python-dotenv
-authlib
-apscheduler
-requests
+python-3.11.6
