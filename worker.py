@@ -1,16 +1,20 @@
 from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 from dotenv import load_dotenv
 import os
-import requests
+import logging
 
-load_dotenv()
+from app import notify_due_tasks   # <-- import the function from your app
 
-BASE_URL = "https://your-site-url"  # replace with your actual live URL
+load_dotenv()  # load environment variables
 
-def notify():
-    requests.get(f"{BASE_URL}/run-scheduler")
+scheduler = BlockingScheduler(timezone="UTC")
 
-scheduler = BlockingScheduler()
-scheduler.add_job(notify, "interval", minutes=1)
+# Run notify_due_tasks every 5 minutes (same as before)
+scheduler.add_job(notify_due_tasks, IntervalTrigger(minutes=5), id="notify_due_tasks", replace_existing=True)
+
+logging.basicConfig(level=logging.INFO)
+print("Worker started: Notification scheduler running...")
 
 scheduler.start()
+
