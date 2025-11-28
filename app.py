@@ -72,13 +72,75 @@ def at_headers(json=False):
     return h
 
 # ---------------------- AI helper ----------------------
-def ask_ai(user_text, retries=2):
-    """Call HF Space (gradio) /run/predict endpoint with retries and defensive checks."""
+import json
+# google-generativeai client (optional - only used if GEMINI_API_KEY is set)
+try:
+    import google.generativeai as genai
+    HAS_GEMINI_SDK = True
+except Exception:
+    HAS_GEMINI_SDK = False
+
+# Configure keys (env must be set on Render / GitHub Actions)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY and HAS_GEMINI_SDK:
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+    except Exception as e:
+        print("Warning: failed to configure Gemini SDK:", e)
+        GEMINI_API_KEY = None  # disable if configure fails
+
+# Keep existing HF_API_URL environment variable as a fallback
+HF_API_URL = os.getenv(
+    "HF_API_URL",
+    HF_API_URL  # this uses your previously defined HF_API_URL variable
+)
+
+# System prompt used for Gemini (and helpful to include when sending to HF as text)
+SYSTEM_PROMPT_LINES = [
+    "You are an AI Task Planner Assistant.",
+    "Your job is to read the user's message and convert it into structured JSON.",
+    "",
+    "Return ONLY this JSON EXACT format (no extra commentary):",
+    "{",
+    '  "action": "",',
+    '  "task": "",',
+    '  "date": "",',
+    '  "extra": ""',
+    "}",
+    "",
+    "If user asks something unrelated, return action='general' and explain in extra."
+]
+SYSTEM_PROMPT = "\n".join(SYSTEM_PROMPT_LINES)
+
+def ask_ai_gemini(user_text, model_name="gemini-pro"):
+    """Call Gemini via google.generativeai. Returns a dict with the parsed JSON or error fallback."""
+    prompt = f"{SYSTEM_PROMPT}\n\nUser: {user_text}\nAssistant:"
+    try:
+        model = genai.GenerativeModel(model_name)
+        # generate_content is used in many genai examples; adjust if SDK version differs
+        response = model.generate_content(prompt)
+        ai_output = (response.text or "").strip()
+    except Exception as e:
+        return {"type": "error", "message": f"Gemini request failed: {e}", "raw": str(e)}
+
+    # try to extract JSON substring
+    try:
+        start = ai_output.find("{")
+        end = ai_output.rfind("}") + 1
+        json_text = ai_output[start:end]
+        parsed = json.loads(json_text)
+        return {"type": "success", "result": parsed}
+    except Exception:
+        return {"type": "error", "message": "Gemini returned non-JSON output", "raw": ai_output}
+
+def ask_ai_hf(user_text, retries=2):
+    """Existing HF Space caller (kept as fallback). Returns parsed HF-style content or error."""
     if not user_text:
         return {"type": "error", "message": "No input text provided."}
 
     for attempt in range(retries + 1):
         try:
+            # Your HF Space previously expected payload {"data": [user_text]}
             resp = requests.post(HF_API_URL, json={"data": [user_text]}, timeout=25)
             text = resp.text or ""
             if not text.strip():
@@ -88,7 +150,9 @@ def ask_ai(user_text, retries=2):
                 return {"type": "error", "message": "Empty response from HF Space (cold start). Try again."}
             try:
                 parsed = resp.json()
-                return parsed.get("data", [None])[0]
+                # Gradio Spaces commonly return {"data": [<json>], ...}
+                # We preserve your old behavior: return the first element of data
+                return parsed.get("data", [None])[0] if isinstance(parsed, dict) else {"type":"error","message":"Unexpected HF response"}
             except ValueError:
                 # Not JSON
                 return {"type": "error", "message": "Invalid JSON from HF Space: " + text[:300]}
@@ -98,18 +162,46 @@ def ask_ai(user_text, retries=2):
                 continue
             return {"type": "error", "message": f"HF request error: {e}"}
 
-# AI endpoint used by dashboard.js
+def ask_ai(user_text):
+    """
+    Wrapper used by the rest of your app.
+    - If GEMINI_API_KEY is available and SDK usable => use Gemini.
+    - Otherwise fallback to existing HuggingFace Space (ask_ai_hf).
+    """
+    if not user_text:
+        return {"type": "error", "message": "No input provided."}
+
+    # Prefer Gemini if available
+    if GEMINI_API_KEY and HAS_GEMINI_SDK:
+        resp = ask_ai_gemini(user_text)
+        # If Gemini returns error but contains raw output, attempt fallback (optional)
+        if resp.get("type") == "success":
+            return resp.get("result")
+        else:
+            # Log the Gemini error and fallback to HF if available
+            print("Gemini error or non-JSON result:", resp.get("message") or resp.get("raw"))
+            # attempt HF fallback if HF_API_URL is set
+            if HF_API_URL:
+                return ask_ai_hf(user_text)
+            return {"type": "error", "message": resp.get("message", "Gemini failure"), "raw": resp.get("raw")}
+
+    # If Gemini not configured, use HF fallback
+    return ask_ai_hf(user_text)
+
+# AI endpoint used by dashboard.js (unchanged URL)
 @app.route("/ai-process", methods=["POST"])
 def ai_process():
     payload = request.get_json(silent=True) or {}
-    # Accept both keys for compatibility
     user_input = payload.get("user_input") or payload.get("text") or ""
     if not user_input:
         return jsonify({"type": "error", "message": "No text provided"}), 400
 
     ai_reply = ask_ai(user_input)
-    return jsonify(ai_reply)
-
+    # ensure ai_reply is JSON-serializable
+    try:
+        return jsonify(ai_reply)
+    except Exception as e:
+        return jsonify({"type":"error","message":"AI reply not serializable","detail":str(e),"raw":str(ai_reply)})
 # ---------------------- Landing & Auth ----------------------
 @app.route("/")
 def index():
@@ -371,3 +463,4 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
