@@ -4,3 +4,4 @@ python-dotenv
 requests
 authlib
 google-generativeai
+apscheduler
