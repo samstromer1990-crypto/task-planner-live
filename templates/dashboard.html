@@ -1,186 +1,188 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Task Planner Dashboard</title>
-    <style>
-        body {
-            font-family: "Segoe UI", sans-serif;
-            background-color: #f4f6f8;
-            color: #333;
-            margin: 0;
-            padding: 0;
-        }
+  <meta charset="UTF-8">
+  <title>Your Task Planner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        header {
-            background-color: #0078d7;
-            color: white;
-            text-align: center;
-            padding: 1rem 0;
-        }
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
-        .container {
-            max-width: 800px;
-            margin: 30px auto;
-            background: white;
-            padding: 20px 30px;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
+  <style>
+    :root {
+      --bg: #fafafa;
+      --card: #ffffff;
+      --border: #e6e6e6;
+      --text: #333;
+      --muted: #666;
+      --primary: #0d6efd;
+    }
 
-        h2 {
-            margin-bottom: 10px;
-            color: #0078d7;
-        }
+    body {
+      background: var(--bg);
+      font-family: "Inter", "Segoe UI", Arial, sans-serif;
+      color: var(--text);
+    }
 
-        form {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 25px;
-        }
+    .nav-container {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
 
-        input, button {
-            padding: 10px;
-            font-size: 1rem;
-            border-radius: 5px;
-            border: 1px solid #ccc;
-        }
+    .nav-title { font-size: 18px; font-weight: 600; }
 
-        button {
-            background-color: #0078d7;
-            color: white;
-            cursor: pointer;
-            border: none;
-        }
+    .user-info { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
+    .user-info img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
 
-        button:hover {
-            background-color: #005fa3;
-        }
+    .container-box { max-width: 880px; margin: 28px auto 60px; padding: 0 12px; }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
+    .task-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      transition: border-color .2s ease, box-shadow .2s ease;
+    }
 
-        th, td {
-            border: 1px solid #ddd;
-            text-align: left;
-            padding: 10px;
-        }
+    .task-card:hover { border-color: #d5d5d5; box-shadow: 0 2px 10px rgba(0,0,0,.04); }
 
-        th {
-            background-color: #0078d7;
-            color: white;
-        }
+    .task-title { font-weight: 600; }
+    .task-muted { color: var(--muted); font-size: 13px; }
+    .completed { opacity: .55; text-decoration: line-through; }
 
-        tr:nth-child(even) {
-            background-color: #f8f9fb;
-        }
+    .btn-primary-custom {
+      background: var(--primary);
+      border: 1px solid var(--primary);
+      color: #fff;
+    }
 
-        /* Simple AI box style */
-        .ai-box {
-            background: #eef5ff;
-            padding: 15px;
-            border-radius: 10px;
-            margin-top: 25px;
-            border: 1px solid #c7ddff;
-        }
+    .btn-primary-custom:hover { background: #0048c6; border-color: #0048c6; }
 
-        .ai-box textarea {
-            width: 100%;
-            height: 90px;
-            padding: 10px;
-            resize: none;
-            font-size: 1rem;
-        }
+    .dtl { max-width: 210px; }
 
-        .ai-output {
-            background: white;
-            padding: 10px;
-            border-radius: 6px;
-            margin-top: 10px;
-            border: 1px solid #ddd;
-            min-height: 50px;
-            white-space: pre-wrap;
-        }
-    </style>
+    .card { border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  </style>
 </head>
 <body>
-    <header>
-        <h1>📅 Task Planner Dashboard</h1>
-    </header>
 
-    <div class="container">
-        <h2>Add Task</h2>
-        <form id="taskForm">
-            <input type="text" name="name" placeholder="Task name" required>
-            <input type="datetime-local" name="reminder" required>
-            <button type="submit">Add Task</button>
-        </form>
+  <!-- NAV -->
+  <div class="nav-container">
+    <div class="nav-title">Your Task Planner</div>
+    <div class="user-info">
+      <span>{{ user.name }}</span>
+      {% if user.picture %}
+      <img src="{{ user.picture }}" alt="profile">
+      {% endif %}
+      <a class="btn btn-outline-secondary btn-sm" href="/logout">Logout</a>
+    </div>
+  </div>
 
-        <h2>Current Tasks</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Task</th>
-                    <th>Reminder</th>
-                    <th>Completed</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for task in tasks %}
-                <tr>
-                    <td>{{ task.name }}</td>
-                    <td>{{ task.reminder }}</td>
-                    <td>{{ "✅" if task.completed else "❌" }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+  <!-- MAIN -->
+  <div class="container-box">
 
-        <!-- ⭐ AI ASSISTANT BOX ⭐ -->
-        <div class="ai-box">
-            <h2>AI Assistant 🤖</h2>
-            <p>Ask anything or describe tasks. AI will help you.</p>
+    <h2>Hey {{ user.name.split(' ')[0] if user.name else 'there' }} 👋</h2>
+    <div class="text-muted mb-3">Add tasks, set reminders, mark complete. Emails fire automatically.</div>
 
-            <textarea id="ai_text" placeholder="Example: Help me plan tomorrow's study schedule..."></textarea>
-
-            <button onclick="askAI()" style="margin-top:10px;">Ask AI</button>
-
-            <div id="ai_output" class="ai-output"></div>
-        </div>
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h4>Your Tasks</h4>
+      <button class="btn btn-primary-custom btn-sm" data-bs-toggle="modal" data-bs-target="#addTaskModal">Add Task</button>
     </div>
 
-    <script>
-        // ------- Add Task -------
-        document.getElementById("taskForm").addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const form = new FormData(e.target);
-            const res = await fetch("/add", {
-                method: "POST",
-                body: form
-            });
-            if (res.ok) location.reload();
-        });
+    <!-- TASK LIST -->
+    {% for task in tasks %}
+    <div class="task-card {% if task.completed %}completed{% endif %}">
+      <div class="row g-2 align-items-center">
+        <div class="col-md-6">
+          <div class="task-title">{{ task.task }}</div>
+          <div class="task-muted">{% if task.completed %}✔ Completed{% else %}⏳ Pending{% endif %}</div>
 
-        // ------- AI Chat -------
-        async function askAI() {
-            const text = document.getElementById("ai_text").value;
-            const box = document.getElementById("ai_output");
+          <form action="/update-time/{{ task.id }}" method="POST" class="d-flex align-items-center gap-2 mt-2">
+            <input type="datetime-local" name="reminder_time" value="{{ task.raw_reminder_time }}" class="form-control form-control-sm dtl">
+            <button class="btn btn-outline-secondary btn-sm">Save</button>
+          </form>
+        </div>
 
-            box.innerText = "Thinking...";
+        <div class="col-md-6 text-md-end">
+          {% if not task.completed %}
+          <a href="/complete/{{ task.id }}" class="btn btn-primary-custom btn-sm">Mark Complete</a>
+          {% else %}
+          <span class="badge bg-success">Done</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
 
-            const res = await fetch("/ai-process", {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({ text: text })
-            });
+    {% if tasks|length == 0 %}
+    <div class="alert alert-light border text-center mt-3">No tasks yet. Click "Add Task" to create one.</div>
+    {% endif %}
 
-            const data = await res.json();
-            box.innerText = JSON.stringify(data, null, 2);
-        }
-    </script>
+    <!-- ADD TASK MODAL -->
+    <div class="modal fade" id="addTaskModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Add Task</h5>
+            <button class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+
+          <form action="/add-task" method="POST">
+            <div class="modal-body">
+              <label class="form-label">Task Name</label>
+              <input type="text" name="task_name" class="form-control mb-3" required>
+
+              <label class="form-label">Reminder Time</label>
+              <input type="datetime-local" name="reminder_time" class="form-control">
+            </div>
+
+            <div class="modal-footer">
+              <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button class="btn btn-primary-custom">Add Task</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI SECTION -->
+    <div class="card p-3 mt-4">
+      <h5>AI Assistant 🤖</h5>
+      <p class="text-muted">Ask anything. AI will help extract tasks or chat.</p>
+
+      <div class="input-group mb-2">
+        <input id="ai_input" class="form-control" placeholder="e.g., Remind me to study physics tomorrow at 4 PM">
+        <button class="btn btn-primary-custom" onclick="sendToAI()">Ask</button>
+      </div>
+
+      <pre id="ai_output" class="p-2 bg-light" style="min-height:100px; white-space: pre-wrap;"></pre>
+    </div>
+
+  </div>
+
+  <script>
+    async function sendToAI() {
+      const text = document.getElementById("ai_input").value;
+
+      const res = await fetch("/ai-process", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ user_input: text })
+      });
+
+      const data = await res.json();
+      document.getElementById("ai_output").innerText = JSON.stringify(data, null, 2);
+    }
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
 </body>
 </html>
