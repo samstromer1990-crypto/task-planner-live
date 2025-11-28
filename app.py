@@ -35,10 +35,7 @@ EMAIL_FROM = os.getenv("EMAIL_FROM", SMTP_USER)
 EMAIL_TO = os.getenv("EMAIL_TO")
 
 # Hugging Face Space URL (or custom API endpoint)
-HF_API_URL = os.getenv(
-    "HF_API_URL",
-    "https://samai200000000024-task-planner-live.hf.space/run/predict"
-)
+HF_API_URL = None
 
 # Google OAuth (Authlib)
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
@@ -89,11 +86,8 @@ if GEMINI_API_KEY and HAS_GEMINI_SDK:
         print("Warning: failed to configure Gemini SDK:", e)
         GEMINI_API_KEY = None  # disable if configure fails
 
-# Keep existing HF_API_URL environment variable as a fallback
-HF_API_URL = os.getenv(
-    "HF_API_URL",
-    HF_API_URL  # this uses your previously defined HF_API_URL variable
-)
+
+HF_API_URL = None
 
 # System prompt used for Gemini (and helpful to include when sending to HF as text)
 SYSTEM_PROMPT_LINES = [
@@ -133,62 +127,28 @@ def ask_ai_gemini(user_text, model_name="gemini-pro"):
     except Exception:
         return {"type": "error", "message": "Gemini returned non-JSON output", "raw": ai_output}
 
-def ask_ai_hf(user_text, retries=2):
-    """Existing HF Space caller (kept as fallback). Returns parsed HF-style content or error."""
-    if not user_text:
-        return {"type": "error", "message": "No input text provided."}
-
-    for attempt in range(retries + 1):
-        try:
-            # Your HF Space previously expected payload {"data": [user_text]}
-            resp = requests.post(HF_API_URL, json={"data": [user_text]}, timeout=25)
-            text = resp.text or ""
-            if not text.strip():
-                if attempt < retries:
-                    time.sleep(1.5)
-                    continue
-                return {"type": "error", "message": "Empty response from HF Space (cold start). Try again."}
-            try:
-                parsed = resp.json()
-                # Gradio Spaces commonly return {"data": [<json>], ...}
-                # We preserve your old behavior: return the first element of data
-                return parsed.get("data", [None])[0] if isinstance(parsed, dict) else {"type":"error","message":"Unexpected HF response"}
-            except ValueError:
-                # Not JSON
-                return {"type": "error", "message": "Invalid JSON from HF Space: " + text[:300]}
-        except Exception as e:
-            if attempt < retries:
-                time.sleep(1.5)
-                continue
-            return {"type": "error", "message": f"HF request error: {e}"}
-
 def ask_ai(user_text):
-    """
-    Wrapper used by the rest of your app.
-    - If GEMINI_API_KEY is available and SDK usable => use Gemini.
-    - Otherwise fallback to existing HuggingFace Space (ask_ai_hf).
-    """
+    """Gemini only — no HF fallback."""
     if not user_text:
         return {"type": "error", "message": "No input provided."}
 
-    # Prefer Gemini if available
-    if GEMINI_API_KEY and HAS_GEMINI_SDK:
-        resp = ask_ai_gemini(user_text)
-        # If Gemini returns error but contains raw output, attempt fallback (optional)
-        if resp.get("type") == "success":
-            return resp.get("result")
-        else:
-            # Log the Gemini error and fallback to HF if available
-            print("Gemini error or non-JSON result:", resp.get("message") or resp.get("raw"))
-            # attempt HF fallback if HF_API_URL is set
-            if HF_API_URL:
-                return ask_ai_hf(user_text)
-            return {"type": "error", "message": resp.get("message", "Gemini failure"), "raw": resp.get("raw")}
+    # Ensure Gemini is available
+    if not GEMINI_API_KEY or not HAS_GEMINI_SDK:
+        return {"type": "error", "message": "Gemini is not configured on the server."}
 
-    # If Gemini not configured, use HF fallback
-    return ask_ai_hf(user_text)
+    resp = ask_ai_gemini(user_text)
 
-# AI endpoint used by dashboard.js (unchanged URL)
+    # If Gemini returned success
+    if resp.get("type") == "success":
+        return resp.get("result")
+
+    # If Gemini returned error
+    return {
+        "type": "error",
+        "message": resp.get("message", "Gemini failed"),
+        "raw": resp.get("raw")
+    }
+
 @app.route("/ai-process", methods=["POST"])
 def ai_process():
     payload = request.get_json(silent=True) or {}
@@ -463,4 +423,5 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
 
