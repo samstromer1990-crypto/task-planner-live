@@ -1,6 +1,5 @@
-Flask
-python-dotenv
-authlib
-apscheduler
-requests
+flask
 gunicorn
+python-dotenv
+google-generativeai
+requests
