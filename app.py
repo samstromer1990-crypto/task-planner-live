@@ -6,6 +6,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone, timedelta
+import time
 
 from flask import Flask, redirect, url_for, session, render_template, request, jsonify
 from authlib.integrations.flask_client import OAuth
@@ -33,24 +34,49 @@ app.secret_key = os.getenv("SECRET_KEY", "dev_key")
 # ---------------------- Hugging Face AI Setup ----------------------
 HF_API_URL = "https://samai200000000024-task-planner-live.hf.space/run/predict"
 
-def ask_ai(user_text):
-    """Send user text to Hugging Face AI and return JSON result"""
-    try:
-        resp = requests.post(
-            HF_API_URL,
-            json={"data": [user_text]},
-            timeout=25
-        )
-        return resp.json()["data"][0]
-    except Exception as e:
-        return {"type": "error", "message": str(e)}
+def ask_ai(user_text, retries=2):
+    """Send user text to Hugging Face AI and return JSON result with basic retry and checks"""
+    for attempt in range(retries + 1):
+        try:
+            resp = requests.post(
+                HF_API_URL,
+                json={"data": [user_text]},
+                timeout=30
+            )
+            # If response is empty or not-json, handle gracefully
+            text = resp.text or ""
+            if not text.strip():
+                # empty response -- likely cold start
+                if attempt < retries:
+                    time.sleep(1.5)
+                    continue
+                return {"type": "error", "message": "Empty response from HF Space (cold start). Try again."}
+
+            try:
+                # Gradio returns {"data": [...]} structure
+                parsed = resp.json()
+                return parsed.get("data", [None])[0]
+            except ValueError:
+                # Not valid JSON
+                return {"type": "error", "message": "Invalid JSON from HF Space: " + text[:200]}
+        except Exception as e:
+            if attempt < retries:
+                time.sleep(1.5)
+                continue
+            return {"type": "error", "message": f"Error calling HF Space: {str(e)}"}
 
 @app.route("/ai-process", methods=["POST"])
 def ai_process():
     """POST API to connect dashboard text box to AI"""
-    user_input = request.json.get("user_input", "")
+    # JS sends { text: "..." }
+    payload = request.get_json(silent=True) or {}
+    user_input = payload.get("text", "") or payload.get("user_input", "")
+    if not user_input:
+        return jsonify({"type": "error", "message": "No text provided"}), 400
+
     ai_reply = ask_ai(user_input)
     return jsonify(ai_reply)
+
 
 # ---------------------- Google Login ----------------------
 oauth = OAuth(app)
@@ -94,11 +120,17 @@ def logout():
 
 # ---------------------- Airtable Helpers ----------------------
 def airtable_url():
+    if not AIRTABLE_BASE_ID or not AIRTABLE_TABLE_NAME:
+        # defensive return so we don't craft invalid URL
+        return None
     return f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{urllib.parse.quote(AIRTABLE_TABLE_NAME)}"
 
 def at_headers(json=False):
-    h = {"Authorization": f"Bearer {AIRTABLE_TOKEN}"}
-    if json: h["Content-Type"] = "application/json"
+    h = {}
+    if AIRTABLE_TOKEN:
+        h["Authorization"] = f"Bearer {AIRTABLE_TOKEN}"
+    if json:
+        h["Content-Type"] = "application/json"
     return h
 
 # ---------------------- Dashboard ----------------------
@@ -108,7 +140,21 @@ def dashboard():
         return redirect("/")
 
     url = airtable_url()
-    records = requests.get(url, headers=at_headers()).json().get("records", [])
+    records = []
+    if url:
+        try:
+            r = requests.get(url, headers=at_headers())
+            # if airtable returns non-json or error, show empty list but log
+            try:
+                records = r.json().get("records", [])
+            except Exception:
+                print("Airtable fetch error (dashboard):", r.status_code, r.text[:300])
+                records = []
+        except Exception as e:
+            print("Airtable request exception (dashboard):", e)
+            records = []
+    else:
+        print("Airtable configuration missing: BASE_ID or TABLE_NAME")
 
     IST_OFFSET = timedelta(hours=5, minutes=30)
 
@@ -137,27 +183,59 @@ def dashboard():
 # ---------------------- Task Actions ----------------------
 @app.route("/complete/<record_id>")
 def complete_task(record_id):
-    requests.patch(f"{airtable_url()}/{record_id}", json={"fields": {"Completed": True}}, headers=at_headers(json=True))
+    url = airtable_url()
+    if not url:
+        return "Airtable not configured", 500
+
+    resp = requests.patch(f"{url}/{record_id}", json={"fields": {"Completed": True}}, headers=at_headers(json=True))
+    if resp.status_code not in (200, 201):
+        # show error text so you can debug
+        return f"Airtable error (complete): {resp.status_code} - {resp.text}", 500
     return redirect("/dashboard")
 
 @app.route("/update-time/<record_id>", methods=["POST"])
 def update_time(record_id):
     new_time = request.form.get("reminder_time")
-    requests.patch(f"{airtable_url()}/{record_id}", json={"fields": {"Reminder Local": new_time}}, headers=at_headers(json=True))
+    url = airtable_url()
+    if not url:
+        return "Airtable not configured", 500
+
+    resp = requests.patch(f"{url}/{record_id}", json={"fields": {"Reminder Local": new_time}}, headers=at_headers(json=True))
+    if resp.status_code not in (200, 201):
+        return f"Airtable error (update-time): {resp.status_code} - {resp.text}", 500
     return redirect("/dashboard")
 
 @app.route("/add-task", methods=["POST"])
 def add_task():
+    if "user" not in session:
+        return "Not logged in", 403
+
     task_name = request.form.get("task_name")
     reminder_time = request.form.get("reminder_time")
-    requests.post(airtable_url(), json={
+    url = airtable_url()
+    if not url:
+        return "Airtable not configured", 500
+
+    payload = {
         "fields": {
             "Task Name": task_name,
             "Completed": False,
             "Reminder Local": reminder_time,
-            "Email": session["user"]["email"]
+            "Email": session["user"].get("email")
         }
-    }, headers=at_headers(json=True))
+    }
+
+    try:
+        resp = requests.post(url, json=payload, headers=at_headers(json=True), timeout=15)
+    except Exception as e:
+        print("Airtable POST exception (add_task):", e)
+        return f"Airtable POST exception: {e}", 500
+
+    # If Airtable did not accept it, surface the message so we can debug
+    if resp.status_code not in (200, 201):
+        # Show the Airtable reply so you can fix env / base / table
+        print("Airtable add error:", resp.status_code, resp.text)
+        return f"Airtable add error: {resp.status_code} - {resp.text}", 500
 
     return redirect("/dashboard")
 
@@ -175,7 +253,8 @@ def send_reminder_email(task_name, reminder_time):
             server.login(SMTP_USER, SMTP_PASS)
             server.send_message(msg)
         return True
-    except:
+    except Exception as e:
+        print("SMTP send error:", e)
         return False
 
 # ---------------------- Reminder Job ----------------------
@@ -191,7 +270,17 @@ def notify_due_tasks():
     )
     """
     params = {"filterByFormula": formula.replace("\n", "")}
-    records = requests.get(airtable_url(), headers=at_headers(), params=params).json().get("records", [])
+    records = []
+    url = airtable_url()
+    if url:
+        try:
+            r = requests.get(url, headers=at_headers(), params=params)
+            records = r.json().get("records", [])
+        except Exception as e:
+            print("Airtable notify fetch error:", e)
+            records = []
+    else:
+        records = []
 
     for rec in records:
         task_name = rec["fields"].get("Task Name", "Task")
@@ -199,7 +288,10 @@ def notify_due_tasks():
 
         send_reminder_email(task_name, reminder_time)
 
-        requests.patch(f"{airtable_url()}/{rec['id']}", json={"fields": {"Last Notified At": datetime.now(timezone.utc).isoformat()}}, headers=at_headers(json=True))
+        try:
+            requests.patch(f"{url}/{rec['id']}", json={"fields": {"Last Notified At": datetime.now(timezone.utc).isoformat()}}, headers=at_headers(json=True))
+        except Exception as e:
+            print("Airtable patch after notify error:", e)
 
 @app.route("/test-reminder")
 def test_reminder():
@@ -209,17 +301,30 @@ def test_reminder():
 # ---------------------- Debug ----------------------
 @app.route("/debug-records")
 def debug_records():
-    return jsonify(requests.get(airtable_url(), headers=at_headers()).json())
+    url = airtable_url()
+    if not url:
+        return jsonify({"error": "Airtable not configured"})
+    r = requests.get(url, headers=at_headers())
+    try:
+        return jsonify(r.json())
+    except Exception:
+        return f"Airtable debug error: status {r.status_code} - {r.text}", 500
 
 # ---------------------- Stats API for Charts ----------------------
 def fetch_all_records():
-    url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{urllib.parse.quote(AIRTABLE_TABLE_NAME)}"
-    headers = {"Authorization": f"Bearer {AIRTABLE_TOKEN}"}
+    url = airtable_url()
+    headers = {"Authorization": f"Bearer {AIRTABLE_TOKEN}"} if AIRTABLE_TOKEN else {}
     records = []
     params = {}
+    if not url:
+        return []
     while True:
         resp = requests.get(url, headers=headers, params=params)
-        payload = resp.json()
+        try:
+            payload = resp.json()
+        except Exception as e:
+            print("Airtable fetch_all_records json error:", e, resp.status_code, resp.text[:300])
+            break
         records.extend(payload.get("records", []))
         offset = payload.get("offset")
         if not offset:
@@ -284,4 +389,3 @@ scheduler.start()
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000, host="0.0.0.0")
-
