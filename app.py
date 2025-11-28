@@ -106,31 +106,37 @@ SYSTEM_PROMPT_LINES = [
 ]
 SYSTEM_PROMPT = "\n".join(SYSTEM_PROMPT_LINES)
 
-def ask_ai_gemini(user_text, model_name="gemini-1.5-flash"):
+def ask_ai_gemini(user_text):
     prompt = f"{SYSTEM_PROMPT}\nUser: {user_text}\nAssistant:"
-    try:
-        model = genai.GenerativeModel(model_name)
-        response = model.generate_content(prompt)
-        txt = (response.text or "").strip()
-    except Exception as e:
-        return {"type": "error", "message": f"Gemini request failed: {e}", "raw": str(e)}
 
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": 0.2,
+                "top_p": 0.8,
+                "max_output_tokens": 512,
+            }
+        )
+
+        txt = (response.text or "").strip()
+
+    except Exception as e:
+        return {
+            "type": "error",
+            "message": f"Gemini request failed: {e}",
+            "raw": str(e)
+        }
+
+    # Extract JSON
     try:
         json_str = txt[txt.find("{"):txt.rfind("}")+1]
         parsed = json.loads(json_str)
         return {"type": "success", "result": parsed}
     except:
         return {"type": "error", "message": "Gemini returned non-JSON output", "raw": txt}
-
-    # try to extract JSON substring
-    try:
-        start = ai_output.find("{")
-        end = ai_output.rfind("}") + 1
-        json_text = ai_output[start:end]
-        parsed = json.loads(json_text)
-        return {"type": "success", "result": parsed}
-    except Exception:
-        return {"type": "error", "message": "Gemini returned non-JSON output", "raw": ai_output}
 
 def ask_ai(user_text):
     """Gemini only — no HF fallback."""
@@ -428,6 +434,7 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
 
 
 
