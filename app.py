@@ -48,7 +48,7 @@ def ask_ai(user_text):
 @app.route("/ai-process", methods=["POST"])
 def ai_process():
     """POST API to connect dashboard text box to AI"""
-    user_input = request.json.get("text", "")
+    user_input = request.json.get("user_input", "")
     ai_reply = ask_ai(user_input)
     return jsonify(ai_reply)
 
@@ -284,3 +284,4 @@ scheduler.start()
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000, host="0.0.0.0")
+
