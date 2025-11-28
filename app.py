@@ -13,7 +13,6 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from collections import Counter
 
-
 # ---------------------- Load .env ----------------------
 load_dotenv()
 
@@ -30,6 +29,28 @@ EMAIL_TO = os.getenv("EMAIL_TO")
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_key")
+
+# ---------------------- Hugging Face AI Setup ----------------------
+HF_API_URL = "https://samai200000000024-task-planner-live.hf.space/run/predict"
+
+def ask_ai(user_text):
+    """Send user text to Hugging Face AI and return JSON result"""
+    try:
+        resp = requests.post(
+            HF_API_URL,
+            json={"data": [user_text]},
+            timeout=25
+        )
+        return resp.json()["data"][0]
+    except Exception as e:
+        return {"type": "error", "message": str(e)}
+
+@app.route("/ai-process", methods=["POST"])
+def ai_process():
+    """POST API to connect dashboard text box to AI"""
+    user_input = request.json.get("text", "")
+    ai_reply = ask_ai(user_input)
+    return jsonify(ai_reply)
 
 # ---------------------- Google Login ----------------------
 oauth = OAuth(app)
@@ -58,11 +79,10 @@ def authorize():
     resp = google.get(google.server_metadata["userinfo_endpoint"], token=token)
     ui = resp.json()
 
-    # ✅ FIX: include picture so dashboard doesn’t break
     session["user"] = {
         "name": ui.get("name"),
         "email": ui.get("email"),
-        "picture": ui.get("picture")  # Added
+        "picture": ui.get("picture")
     }
 
     return redirect("/dashboard")
@@ -131,13 +151,13 @@ def add_task():
     task_name = request.form.get("task_name")
     reminder_time = request.form.get("reminder_time")
     requests.post(airtable_url(), json={
-    "fields": {
-        "Task Name": task_name,
-        "Completed": False,
-        "Reminder Local": reminder_time,
-        "Email": session["user"]["email"]
-    }
-}, headers=at_headers(json=True))
+        "fields": {
+            "Task Name": task_name,
+            "Completed": False,
+            "Reminder Local": reminder_time,
+            "Email": session["user"]["email"]
+        }
+    }, headers=at_headers(json=True))
 
     return redirect("/dashboard")
 
@@ -159,51 +179,27 @@ def send_reminder_email(task_name, reminder_time):
         return False
 
 # ---------------------- Reminder Job ----------------------
-from datetime import datetime, timezone, timedelta
-
 def notify_due_tasks():
-    IST_OFFSET = timedelta(hours=5, minutes=30)
-
-    now_utc = datetime.now(timezone.utc)
-    now_ist = now_utc + IST_OFFSET
-
-    records = requests.get(airtable_url(), headers=at_headers()).json().get("records", [])
+    formula = """
+    AND(
+      {Completed}=0,
+      {Reminder Local} <= NOW(),
+      OR(
+        {Last Notified At}=BLANK(),
+        DATETIME_DIFF(NOW(), {Last Notified At}, 'minutes') >= 1
+      )
+    )
+    """
+    params = {"filterByFormula": formula.replace("\n", "")}
+    records = requests.get(airtable_url(), headers=at_headers(), params=params).json().get("records", [])
 
     for rec in records:
-        fields = rec.get("fields", {})
-        completed = fields.get("Completed", False)
-        reminder = fields.get("Reminder Local")
-        last_notified = fields.get("Last Notified At")
+        task_name = rec["fields"].get("Task Name", "Task")
+        reminder_time = rec["fields"].get("Reminder Local", "")
 
-        if not reminder or completed:
-            continue
+        send_reminder_email(task_name, reminder_time)
 
-        try:
-            reminder_time = datetime.fromisoformat(reminder.replace("Z", "")).replace(tzinfo=timezone.utc) + IST_OFFSET
-        except:
-            continue
-
-        # Prevent duplicate sends (ignore if last notification was within 5 minutes)
-        if last_notified:
-            try:
-                last_time = datetime.fromisoformat(last_notified.replace("Z", "")).replace(tzinfo=timezone.utc) + IST_OFFSET
-                if (now_ist - last_time) < timedelta(minutes=5):
-                    continue
-            except:
-                pass
-
-        # Allow a 5-minute window to catch reminder
-        time_difference = now_ist - reminder_time
-        if timedelta(0) <= time_difference <= timedelta(minutes=5):
-            send_reminder_email(fields.get("Task Name", "Task"), reminder_time.strftime("%Y-%m-%d %H:%M"))
-
-            # mark notification in Airtable
-            requests.patch(
-                f"{airtable_url()}/{rec['id']}",
-                json={"fields": {"Last Notified At": now_utc.isoformat()}},
-                headers=at_headers(json=True)
-            )
-
+        requests.patch(f"{airtable_url()}/{rec['id']}", json={"fields": {"Last Notified At": datetime.now(timezone.utc).isoformat()}}, headers=at_headers(json=True))
 
 @app.route("/test-reminder")
 def test_reminder():
@@ -230,7 +226,6 @@ def fetch_all_records():
             break
         params["offset"] = offset
     return records
-
 
 @app.route("/stats.json")
 def stats_json():
@@ -282,7 +277,6 @@ def stats_json():
         "timeline_completed": timeline_values,
     }
 
-
 # ---------------------- Scheduler ----------------------
 scheduler = BackgroundScheduler(timezone="UTC")
 scheduler.add_job(notify_due_tasks, IntervalTrigger(minutes=5), id="notify_due_tasks", replace_existing=True)
@@ -290,6 +284,3 @@ scheduler.start()
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000, host="0.0.0.0")
-
-
-
