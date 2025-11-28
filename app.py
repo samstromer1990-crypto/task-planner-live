@@ -106,16 +106,21 @@ SYSTEM_PROMPT_LINES = [
 ]
 SYSTEM_PROMPT = "\n".join(SYSTEM_PROMPT_LINES)
 
-def ask_ai_gemini(user_text, model_name="gemini-pro"):
-    """Call Gemini via google.generativeai. Returns a dict with the parsed JSON or error fallback."""
-    prompt = f"{SYSTEM_PROMPT}\n\nUser: {user_text}\nAssistant:"
+def ask_ai_gemini(user_text, model_name="gemini-1.5-flash"):
+    prompt = f"{SYSTEM_PROMPT}\nUser: {user_text}\nAssistant:"
     try:
         model = genai.GenerativeModel(model_name)
-        # generate_content is used in many genai examples; adjust if SDK version differs
         response = model.generate_content(prompt)
-        ai_output = (response.text or "").strip()
+        txt = (response.text or "").strip()
     except Exception as e:
         return {"type": "error", "message": f"Gemini request failed: {e}", "raw": str(e)}
+
+    try:
+        json_str = txt[txt.find("{"):txt.rfind("}")+1]
+        parsed = json.loads(json_str)
+        return {"type": "success", "result": parsed}
+    except:
+        return {"type": "error", "message": "Gemini returned non-JSON output", "raw": txt}
 
     # try to extract JSON substring
     try:
@@ -423,5 +428,6 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
 
 
