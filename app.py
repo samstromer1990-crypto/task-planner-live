@@ -105,7 +105,6 @@ SYSTEM_PROMPT_LINES = [
     "If user asks something unrelated, return action='general' and explain in extra."
 ]
 SYSTEM_PROMPT = "\n".join(SYSTEM_PROMPT_LINES)
-
 def ask_ai_gemini(user_text):
     prompt = f"{SYSTEM_PROMPT}\nUser: {user_text}\nAssistant:"
 
@@ -114,11 +113,11 @@ def ask_ai_gemini(user_text):
 
         response = model.generate_content(
             prompt,
-            generation_config={
-                "temperature": 0.2,
-                "top_p": 0.8,
-                "max_output_tokens": 512,
-            }
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.2,
+                top_p=0.8,
+                max_output_tokens=512
+            )
         )
 
         txt = (response.text or "").strip()
@@ -130,13 +129,13 @@ def ask_ai_gemini(user_text):
             "raw": str(e)
         }
 
-    # Extract JSON
     try:
         json_str = txt[txt.find("{"):txt.rfind("}")+1]
         parsed = json.loads(json_str)
         return {"type": "success", "result": parsed}
     except:
         return {"type": "error", "message": "Gemini returned non-JSON output", "raw": txt}
+
 
 def ask_ai(user_text):
     """Gemini only — no HF fallback."""
@@ -434,6 +433,7 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
 
 
 
