@@ -9,8 +9,9 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
   <style>
+    /* Light Mode Variables (Default) */
     :root {
-      --bg: #fafafa;
+      --bg: #f4f6f9; /* Lighter background for SaaS feel */
       --card: #ffffff;
       --border: #e6e6e6;
       --text: #333;
@@ -18,15 +19,26 @@
       --primary: #0d6efd;
     }
 
+    /* Dark Mode Variables */
+    .dark-mode {
+      --bg: #111827; /* Very dark background */
+      --card: #1f2937; /* Dark card background */
+      --border: #374151; /* Darker border */
+      --text: #f9fafb; /* Light text */
+      --muted: #9ca3af; /* Light gray muted text */
+      --primary: #3b82f6; /* Blue primary color */
+    }
+
     body {
       background: var(--bg);
       font-family: "Inter", "Segoe UI", Arial, sans-serif;
       color: var(--text);
+      transition: background 0.3s, color 0.3s;
     }
 
     /* Navigation */
     .nav-container {
-      background: #fff;
+      background: var(--card);
       border-bottom: 1px solid var(--border);
       padding: 12px 24px;
       display: flex;
@@ -35,110 +47,163 @@
       position: sticky;
       top: 0;
       z-index: 100;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05);
+      transition: background 0.3s, border-color 0.3s, box-shadow 0.3s;
     }
-    .nav-title { font-size: 18px; font-weight: 600; }
+    .dark-mode .nav-container {
+        box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    .nav-title { font-size: 18px; font-weight: 700; color: var(--primary); }
     .user-info { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
-    .user-info img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+    .user-info img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border); }
+    #theme-toggle { border: none; background: none; }
 
-    /* Dashboard Layout (New) */
+    /* Dashboard Layout */
     .dashboard-layout {
       display: flex;
-      max-width: 1200px; /* Wider max width for the whole app */
+      max-width: 1280px; /* Slightly wider */
       margin: 0 auto;
-      padding: 28px 12px 60px;
+      padding: 32px 16px 60px;
     }
     .sidebar {
       width: 280px;
       flex-shrink: 0;
-      margin-right: 28px;
+      margin-right: 32px;
     }
     .main-content {
       flex-grow: 1;
-      min-width: 0; /* Important for flex to shrink content correctly */
+      min-width: 0;
     }
 
     /* Mobile Responsiveness for Sidebar */
     @media (max-width: 992px) {
       .sidebar {
-        display: none; /* Hide sidebar on small screens */
+        display: none;
       }
       .dashboard-layout {
-        padding: 28px 12px 60px;
-        display: block; /* Switch to single column */
+        padding: 24px 16px 60px;
+        display: block;
       }
     }
 
     /* Card and List Styles */
-    .task-card {
+    .task-card, .card, .calendar-widget {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 14px 16px;
-      margin-bottom: 10px;
-      transition: border-color .2s ease, box-shadow .2s ease;
+      box-shadow: 0 2px 5px rgba(0,0,0,.05);
+      transition: background 0.3s, border-color 0.3s, box-shadow 0.3s;
+      color: var(--text);
     }
-    .task-card:hover { border-color: #d5d5d5; box-shadow: 0 2px 10px rgba(0,0,0,.04); }
-    .task-title { font-weight: 600; }
-    .task-muted { color: var(--muted); font-size: 13px; }
-    .completed { opacity: .55; text-decoration: line-through; }
+    .dark-mode .task-card, .dark-mode .card, .dark-mode .calendar-widget {
+        box-shadow: none; /* Cleaner look in dark mode */
+    }
+
+    .task-card {
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .task-card:hover { border-color: var(--primary); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+    .dark-mode .task-card:hover { border-color: var(--primary); }
+
+    .task-title { font-weight: 600; font-size: 1.1rem; }
+    .task-muted { color: var(--muted); font-size: 0.85rem; }
+
+    /* Completed tasks adjustment */
+    .completed { opacity: .7; text-decoration: line-through; }
+    .dark-mode .completed { opacity: 0.8; color: var(--muted) !important; }
+
     .btn-primary-custom {
       background: var(--primary);
       border: 1px solid var(--primary);
       color: #fff;
+      font-weight: 500;
+      border-radius: 8px;
     }
-    .btn-primary-custom:hover { background: #0048c6; border-color: #0048c6; }
-    .dtl { max-width: 210px; }
-    .card { border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+    .btn-primary-custom:hover { 
+      background: var(--primary); 
+      border-color: var(--primary); 
+      opacity: 0.9;
+    }
+    .dtl { max-width: 210px; border-radius: 6px; }
 
-    /* Calendar Widget Styles */
-    .calendar-widget {
-        padding: 16px;
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: 8px;
+    /* Progress Bar */
+    .progress-card {
+        padding: 18px;
         margin-bottom: 20px;
     }
-    .calendar-header {
-        font-weight: 600;
-        font-size: 16px;
-        margin-bottom: 10px;
-        color: var(--text);
-        text-align: center;
+    .progress {
+        height: 10px;
+        border-radius: 5px;
+        background-color: var(--border);
     }
-    .calendar-grid {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
-        text-align: center;
-        font-size: 12px;
-    }
-    .calendar-day-header {
-        color: var(--muted);
-        padding-bottom: 4px;
-        font-weight: 600;
-    }
-    .calendar-day {
-        padding: 4px 0;
-        cursor: pointer;
-        border-radius: 4px;
-        transition: background-color 0.2s;
-    }
-    .calendar-day:hover {
-        background-color: var(--bg);
-    }
-    .calendar-day.today {
+    .progress-bar {
         background-color: var(--primary);
-        color: #fff;
-        font-weight: 700;
-        box-shadow: 0 2px 5px rgba(13, 108, 253, 0.4);
+        border-radius: 5px;
     }
+
+    /* Calendar Widget Styles */
+    .calendar-widget { padding: 18px; margin-bottom: 20px; }
+    .calendar-header { font-weight: 600; font-size: 1.1rem; margin-bottom: 15px; text-align: center; }
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      text-align: center;
+      gap: 5px;
+    }
+    .calendar-day-header { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+    .calendar-day { 
+      padding: 5px; 
+      border-radius: 6px; 
+      cursor: pointer; 
+      font-size: 0.9rem;
+      transition: background 0.15s;
+    }
+    .calendar-day.today { 
+      background-color: var(--primary); 
+      color: white; 
+      font-weight: 700;
+    }
+    .calendar-day.inactive {
+      color: var(--border);
+      cursor: default;
+    }
+    
+    /* Dark Mode Forms/Modals */
+    .dark-mode .bg-light { background-color: #374151 !important; color: var(--text) !important; }
+    .dark-mode .form-control, .dark-mode .form-control:focus {
+      background-color: #374151;
+      border-color: #4b5563;
+      color: var(--text);
+    }
+    .dark-mode .form-control:focus {
+      box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25);
+    }
+    .dark-mode .modal-content { background-color: var(--card); color: var(--text); }
   </style>
 </head>
 <body>
 
+  {% set completed_tasks = tasks | selectattr('completed', 'equalto', true) | list | length %}
+  {% set total_tasks = tasks | length %}
+  {% set progress_percent = (completed_tasks / total_tasks * 100) | int if total_tasks > 0 else 0 %}
+
   <!-- NAV -->
   <div class="nav-container">
-    <div class="nav-title">Your Task Planner</div>
+    <div class="nav-title">PlanHub</div>
     <div class="user-info">
+      <!-- Dark/Light Theme Toggle -->
+      <button id="theme-toggle" class="btn btn-sm" aria-label="Toggle dark mode">
+        <!-- Sun Icon (visible in Dark Mode) -->
+        <svg id="sun-icon" style="display:none;" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-sun-fill text-warning" viewBox="0 0 16 16">
+          <path d="M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.464 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.464a.5.5 0 0 1 .707 0L6.586 5.879a.5.5 0 0 1-.707.707L4.464 4.464a.5.5 0 0 1 0-.707z"/>
+        </svg>
+        <!-- Moon Icon (visible in Light Mode) -->
+        <svg id="moon-icon" style="display:none;" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-moon-fill text-dark" viewBox="0 0 16 16">
+          <path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.27 7.291 7.291 7.291 1.136 0 2.233-.26 3.167-.745a.768.768 0 0 1 .858.08 8.015 8.015 0 0 1-1.477 2.059c-.744.606-1.543 1.171-2.428 1.636C10.742 15.352 9.427 16 8 16c-4.418 0-8-3.582-8-8 0-1.042.164-2.051.464-3.008.31-.957.734-1.84 1.25-2.671C2.38 2.071 3.25 1.25 4.257.67A8.026 8.026 0 0 1 6 .278z"/>
+        </svg>
+      </button>
+
       <span>{{ user.name }}</span>
       {% if user.picture %}
       <img src="{{ user.picture }}" alt="profile">
@@ -153,9 +218,23 @@
     <!-- SIDEBAR (Calendar & Stats) -->
     <div class="sidebar">
         
-        <!-- Calendar Widget (Static Placeholder) -->
+        <!-- Weekly Progress Card -->
+        <div class="card progress-card">
+            <h6 class="mb-3 d-flex justify-content-between align-items-center">
+                Weekly Progress
+                <span class="fw-bold fs-5 text-primary">{{ progress_percent }}%</span>
+            </h6>
+            <div class="progress" role="progressbar" aria-label="Task Progress" aria-valuenow="{{ progress_percent }}" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-bar" style="width: {{ progress_percent }}%"></div>
+            </div>
+            <p class="text-muted small mt-2">
+                {{ completed_tasks }} out of {{ total_tasks }} tasks completed.
+            </p>
+        </div>
+
+        <!-- Calendar Widget (NOW DYNAMIC) -->
         <div class="calendar-widget">
-            <div class="calendar-header">November 2025</div>
+            <div class="calendar-header" id="calendar-header"></div>
             <div class="calendar-grid">
                 <div class="calendar-day-header">Mo</div>
                 <div class="calendar-day-header">Tu</div>
@@ -164,46 +243,17 @@
                 <div class="calendar-day-header">Fr</div>
                 <div class="calendar-day-header">Sa</div>
                 <div class="calendar-day-header" style="color: #dc3545;">Su</div>
-                <!-- Example days (November 2025 starts on a Saturday) -->
-                <div class="calendar-day" style="grid-column: 6;">1</div>
-                <div class="calendar-day" style="color: #dc3545;">2</div>
-                <div class="calendar-day">3</div>
-                <div class="calendar-day">4</div>
-                <div class="calendar-day">5</div>
-                <div class="calendar-day">6</div>
-                <div class="calendar-day">7</div>
-                <div class="calendar-day">8</div>
-                <div class="calendar-day" style="color: #dc3545;">9</div>
-                <div class="calendar-day">10</div>
-                <div class="calendar-day">11</div>
-                <div class="calendar-day">12</div>
-                <div class="calendar-day">13</div>
-                <div class="calendar-day">14</div>
-                <div class="calendar-day">15</div>
-                <div class="calendar-day" style="color: #dc3545;">16</div>
-                <div class="calendar-day">17</div>
-                <div class="calendar-day">18</div>
-                <div class="calendar-day">19</div>
-                <div class="calendar-day">20</div>
-                <div class="calendar-day">21</div>
-                <div class="calendar-day">22</div>
-                <div class="calendar-day" style="color: #dc3545;">23</div>
-                <div class="calendar-day">24</div>
-                <div class="calendar-day">25</div>
-                <div class="calendar-day">26</div>
-                <div class="calendar-day">27</div>
-                <div class="calendar-day">28</div>
-                <div class="calendar-day today">29</div> <!-- Set to 29 to represent today's date -->
-                <div class="calendar-day" style="color: #dc3545;">30</div>
+                <!-- Dynamic calendar days will be inserted here -->
+                <div id="calendar-days-container"></div>
             </div>
         </div>
         
         <!-- Quick Stats -->
         <div class="card p-3">
             <h6 class="mb-2">Task Summary</h6>
-            <div class="text-muted small">Total Tasks: <span class="fw-bold">{{ tasks|length }}</span></div>
-            <div class="text-muted small">Completed: <span class="text-success fw-bold">{{ tasks | selectattr('completed', 'equalto', true) | list | length }}</span></div>
-            <div class="text-muted small">Pending: <span class="text-danger fw-bold">{{ tasks | selectattr('completed', 'equalto', false) | list | length }}</span></div>
+            <div class="text-muted small">Total Tasks: <span class="fw-bold">{{ total_tasks }}</span></div>
+            <div class="text-muted small">Completed: <span class="text-success fw-bold">{{ completed_tasks }}</span></div>
+            <div class="text-muted small">Pending: <span class="text-danger fw-bold">{{ total_tasks - completed_tasks }}</span></div>
         </div>
 
     </div>
@@ -224,11 +274,16 @@
       {% endwith %}
 
       <h2>Hey {{ user.name.split(' ')[0] if user.name else 'there' }} 👋</h2>
-      <div class="text-muted mb-3">Add tasks, set reminders, mark complete. Emails fire automatically.</div>
+      <div class="text-muted mb-4">Add tasks, set reminders, mark complete. Emails fire automatically.</div>
 
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <h4>Your Tasks</h4>
-        <button class="btn btn-primary-custom btn-sm" data-bs-toggle="modal" data-bs-target="#addTaskModal">Add Task</button>
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0">Upcoming Tasks</h4>
+        <button class="btn btn-primary-custom btn-sm" data-bs-toggle="modal" data-bs-target="#addTaskModal">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-lg me-1" viewBox="0 0 16 16">
+              <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z"/>
+            </svg>
+            Add Task
+        </button>
       </div>
 
       <!-- TASK LIST -->
@@ -237,7 +292,15 @@
         <div class="row g-2 align-items-center">
           <div class="col-md-6">
             <div class="task-title">{{ task.task }}</div>
-            <div class="task-muted">{% if task.completed %}✔ Completed{% else %}⏳ Pending{% endif %}</div>
+            <div class="task-muted">
+                {% if task.completed %}
+                    ✔ Completed
+                {% elif task.raw_reminder_time %}
+                    Reminder: {{ task.raw_reminder_time | replace('Z', '') | truncate(16, True, '') }}
+                {% else %}
+                    ⏳ Pending
+                {% endif %}
+            </div>
 
             <form action="/update-time/{{ task.id }}" method="POST" class="d-flex align-items-center gap-2 mt-2">
               <input type="datetime-local" name="reminder_time" 
@@ -250,11 +313,14 @@
           <!-- Delete and Complete Buttons -->
           <div class="col-md-6 text-md-end d-flex justify-content-end align-items-center gap-2">
             
-            <a href="/delete/{{ task.id }}" 
-               class="btn btn-outline-danger btn-sm" 
-               onclick="return confirm('Are you sure you want to delete the task: {{ task.task | e }}?');">
+            <!-- Delete Button (triggers custom modal) -->
+            <button class="btn btn-outline-danger btn-sm delete-task-btn" 
+                    data-bs-toggle="modal" 
+                    data-bs-target="#confirmModal"
+                    data-task-id="{{ task.id }}"
+                    data-task-name="{{ task.task | e }}">
                Delete
-            </a>
+            </button>
 
             {% if not task.completed %}
             <a href="/complete/{{ task.id }}" class="btn btn-primary-custom btn-sm">Mark Complete</a>
@@ -297,6 +363,28 @@
         </div>
       </div>
 
+      <!-- CONFIRMATION MODAL (For Delete) -->
+      <div class="modal fade" id="confirmModal" tabindex="-1">
+        <div class="modal-dialog modal-sm">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Confirm Delete</h5>
+              <button class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <p>Are you sure you want to delete this task?</p>
+              <div class="task-to-delete-name fw-bold"></div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+              <form id="delete-form" method="GET" action="">
+                <button type="submit" class="btn btn-danger">Delete</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- AI SECTION -->
       <div class="card p-3 mt-4">
         <h5>AI Assistant 🤖</h5>
@@ -316,8 +404,125 @@
 
     
   <script>
+// --- Theme Toggle Logic ---
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Check local storage and apply theme on load
+    const storedTheme = localStorage.getItem('theme');
+    if (storedTheme === 'dark') {
+        document.body.classList.add('dark-mode');
+        updateThemeIcons('dark');
+    } else {
+        updateThemeIcons('light');
+    }
+
+    // 2. Add event listener for the toggle button
+    const toggleButton = document.getElementById('theme-toggle');
+    if (toggleButton) {
+        toggleButton.addEventListener('click', toggleTheme);
+    }
+    
+    // 3. Add event listener for the custom delete modal
+    const confirmModal = document.getElementById('confirmModal');
+    if (confirmModal) {
+        confirmModal.addEventListener('show.bs.modal', function (event) {
+            // Button that triggered the modal
+            const button = event.relatedTarget;
+            const taskId = button.getAttribute('data-task-id');
+            const taskName = button.getAttribute('data-task-name');
+
+            const deleteForm = document.getElementById('delete-form');
+            const taskNameDisplay = confirmModal.querySelector('.task-to-delete-name');
+
+            // Update the form action and display name
+            deleteForm.action = `/delete/${taskId}`;
+            taskNameDisplay.textContent = taskName;
+        });
+    }
+
+    // 4. Render the dynamic calendar
+    renderCalendar();
+});
+
+function updateThemeIcons(theme) {
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+    
+    if (theme === 'dark') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+        
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+}
+
+function toggleTheme() {
+    const isDarkMode = document.body.classList.toggle('dark-mode');
+    const newTheme = isDarkMode ? 'dark' : 'light';
+    localStorage.setItem('theme', newTheme);
+    updateThemeIcons(newTheme);
+}
+
+// --- Dynamic Calendar Logic ---
+function renderCalendar() {
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    
+    // Determine the first day's index (0=Sunday, 1=Monday, ..., 6=Saturday)
+    // We want Monday (1) to be the start of the grid (index 0).
+    let startDayIndex = firstDayOfMonth.getDay(); 
+    if (startDayIndex === 0) { // If it's Sunday (0), we treat it as the last day of the week (index 6)
+        startDayIndex = 7;
+    }
+    // Convert to 0-6 where Monday=0
+    startDayIndex = startDayIndex - 1; 
+
+    const calendarHeader = document.getElementById('calendar-header');
+    const calendarDaysContainer = document.getElementById('calendar-days-container');
+    
+    // Update header (e.g., November 2025)
+    calendarHeader.textContent = firstDayOfMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    
+    // Clear previous days
+    calendarDaysContainer.innerHTML = '';
+    
+    let calendarHTML = '';
+    
+    // 1. Add blank cells (padding for the start of the week)
+    // The calendar-grid already has the day headers, so we just need the empty day cells.
+    // CSS grid is used, so we need to set the column start position for the first day.
+    // The first day element will start at grid-column: startDayIndex + 1 (since CSS grid is 1-indexed)
+    let firstDayStyle = `grid-column: ${startDayIndex + 1};`;
+
+    // 2. Add day cells
+    for (let day = 1; day <= daysInMonth; day++) {
+        let classes = 'calendar-day';
+        let style = '';
+        
+        // Apply the column style only to the very first day element
+        if (day === 1) {
+            style = firstDayStyle;
+        }
+
+        // Highlight today's date
+        if (day === today.getDate() && currentMonth === new Date().getMonth() && currentYear === new Date().getFullYear()) {
+            classes += ' today';
+        }
+        
+        calendarHTML += `<div class="${classes}" style="${style}">${day}</div>`;
+    }
+    
+    calendarDaysContainer.innerHTML = calendarHTML;
+}
+
+// --- AI Interaction Logic ---
 async function sendToAI() {
-    const text = document.getElementById("ai_input").value;
+    const inputElement = document.getElementById("ai_input");
+    const text = inputElement.value;
     const aiOutput = document.getElementById("ai_output");
     aiOutput.innerText = "Processing...";
 
@@ -337,23 +542,28 @@ async function sendToAI() {
         }
 
         // If AI returns a general conversation → show it
-        if (data.action !== "add") {
+        if (data.action === "chat") {
              // For general chat, display the response cleanly
             const chatResponse = data.response || JSON.stringify(data, null, 2);
             aiOutput.innerText = "🤖 Assistant:\n" + chatResponse;
+            // Clear input box
+            inputElement.value = '';
             return;
         }
 
-        // If AI successfully added a task
+        // If AI successfully added a task (data.action === "add")
         // Clean up the ISO string for display (remove Z and milliseconds)
         const timeDisplay = data.reminder_time 
-            ? data.reminder_time.replace('Z', '').substring(0, 16) 
+            ? data.reminder_time.replace('Z', '').substring(0, 16).replace('T', ' at ') 
             : 'None';
             
         aiOutput.innerText =
             "✅ Task added:\n" +
             "Task: " + data.task + "\n" +
-            "Time (UTC): " + timeDisplay;
+            "Time: " + timeDisplay;
+
+        // Clear input box
+        inputElement.value = '';
 
         // Refresh automatically to show the new task
         setTimeout(() => {
