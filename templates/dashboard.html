@@ -220,28 +220,49 @@
                 return;
             }
             
+            // Display user input temporarily
+            outputElement.innerText = `You asked: ${text}\n\nProcessing request... Please wait.`;
+            
             // Disable input and button while processing
             askButton.disabled = true;
             inputElement.disabled = true;
-            outputElement.innerText = "Processing request... Please wait.";
 
             try {
-                const res = await fetch(aiProcessUrl, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ user_input: text })
-                });
+                let res;
+                let data;
+                let retryCount = 0;
+                const maxRetries = 3;
 
-                // Check for HTTP errors first
-                if (!res.ok) {
-                    throw new Error(`HTTP error! status: ${res.status}`);
+                // Simple exponential backoff retry loop for AI API call
+                while (retryCount < maxRetries) {
+                    try {
+                        res = await fetch(aiProcessUrl, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ user_input: text })
+                        });
+
+                        // Only continue if the response status is OK (200-299)
+                        if (res.ok) {
+                            data = await res.json();
+                            break; // Success, break the retry loop
+                        } else {
+                            throw new Error(`HTTP error! status: ${res.status}`);
+                        }
+                    } catch (error) {
+                        retryCount++;
+                        if (retryCount >= maxRetries) {
+                             // If all retries fail, throw the error to be caught below
+                            throw new Error(`Failed to connect or receive valid response after ${maxRetries} attempts.`);
+                        }
+                        // Exponential backoff delay
+                        await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
+                    }
                 }
-
-                const data = await res.json();
-
+                
                 // If AI returns an error → show it
                 if (data.type === "error") {
-                    outputElement.innerText = "❌ Error:\n" + (data.message || "An unknown error occurred.");
+                    outputElement.innerText = "❌ AI Error:\n" + (data.message || "An unknown error occurred.");
                     console.error("AI Error:", data);
                     return;
                 }
