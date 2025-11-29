@@ -182,21 +182,24 @@ def ai_process():
         return jsonify(result)
 
     # Convert natural language date → datetime-local
-    reminder_time = parse_natural_date(date_text)
+    reminder_time = parse_natural_date(date_text) if date_text else None
 
     # 4. Save to Airtable
     url = airtable_url()
     if not url:
         return jsonify({"type": "error", "message": "Airtable not configured"})
 
-    payload = {
-        "fields": {
-            "Task Name": task_name,
-            "Completed": False,
-            "Reminder Local": reminder_time,
-            "Email": session["user"]["email"]
-        }
-    }
+    fields = {
+    "Task Name": task_name,
+    "Completed": False,
+    "Email": session["user"]["email"]
+}
+
+if reminder_time:
+    fields["Reminder Local"] = reminder_time
+
+payload = { "fields": fields }
+
 
     try:
         resp = requests.post(url, json=payload, headers=at_headers(json=True))
@@ -474,5 +477,6 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
 
 
