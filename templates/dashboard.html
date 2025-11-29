@@ -244,7 +244,7 @@
 
     
 <script>
-/* small helper to escape text so raw JSON doesn't become unsafe HTML */
+/* === Helper utilities === */
 function escapeHtml(unsafe) {
   if (unsafe === null || unsafe === undefined) return "";
   return String(unsafe)
@@ -255,83 +255,171 @@ function escapeHtml(unsafe) {
     .replaceAll("'", "&#039;");
 }
 
-function prettyTaskFromResponse(data) {
-  // If backend returns a unified message, prefer that
-  if (data.message) return data.message;
-
-  // If we have a structured AI result (result/action), create a human-friendly sentence
-  const action = data.action || data.type || "";
-  const task = data.task || "";
-  const date = data.reminder_time || data.date || "";
-  const extra = data.extra || "";
-
-  if (action === "add") {
-    return `Scheduled: "${task}" ${date ? "at " + date : ""}`.trim();
-  }
-  if (action === "general" || action === "answer") {
-    if (extra) return `${extra}`;
-    if (task) return `Task: ${task}`;
-    return "AI answered your question.";
-  }
-
-  // fall back to showing a short JSON summary
-  try {
-    return JSON.stringify(data, ["type", "action", "task", "date", "extra", "message"], 2);
-  } catch (e) {
-    return String(data);
-  }
+function scrollChat(chat) {
+  // smooth when possible
+  try { chat.scrollTo({ top: chat.scrollHeight, behavior: "smooth" }); }
+  catch (e) { chat.scrollTop = chat.scrollHeight; }
 }
 
+function appendUser(chat, text) {
+  const el = document.createElement("div");
+  el.className = "user";
+  el.innerHTML = escapeHtml(text);
+  chat.appendChild(el);
+  scrollChat(chat);
+}
+
+function appendBot(chat, htmlContent) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "bot";
+  wrapper.innerHTML = htmlContent;
+  chat.appendChild(wrapper);
+  scrollChat(chat);
+}
+
+/* === Main send function === */
+let isSending = false;
 async function sendToAI() {
   const inputEl = document.getElementById("ai_input");
   const chat = document.getElementById("ai_chat");
-  const text = inputEl.value || "";
+  const sendBtn = document.querySelector(".ai-send-btn");
 
-  if (!text.trim()) return;
+  const text = (inputEl.value || "").trim();
+  if (!text || isSending) return;
 
-  // show user message
-  chat.innerHTML += `<div><b>You:</b> ${escapeHtml(text)}</div>`;
+  // UI: disable input while sending
+  isSending = true;
+  if (sendBtn) sendBtn.disabled = true;
+  inputEl.disabled = true;
+
+  // Show user message
+  appendUser(chat, text);
   inputEl.value = "";
-  chat.scrollTop = chat.scrollHeight;
 
-  let res, data;
+  // Show typing indicator
+  const typingId = "ai-typing-indicator";
+  const typingEl = document.createElement("div");
+  typingEl.id = typingId;
+  typingEl.className = "bot";
+  typingEl.innerHTML = `<i>AI is typing…</i>`;
+  chat.appendChild(typingEl);
+  scrollChat(chat);
+
+  // Perform fetch (with timeout fallback)
+  let controller = null;
+  let timeout = null;
   try {
-    res = await fetch("/ai-process", {
+    controller = new AbortController();
+    timeout = setTimeout(() => controller.abort(), 20000); // 20s timeout
+
+    const res = await fetch("/ai-process", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_input: text })
+      body: JSON.stringify({ user_input: text }),
+      signal: controller.signal
     });
-    data = await res.json();
+
+    clearTimeout(timeout);
+    // remove typing
+    const t = document.getElementById(typingId);
+    if (t) t.remove();
+
+    let data;
+    try {
+      data = await res.json();
+    } catch (e) {
+      // If response isn't JSON, show raw text
+      const raw = await res.text();
+      appendBot(chat, `<pre style="margin:0">${escapeHtml(raw)}</pre>`);
+      throw new Error("Non-JSON response from /ai-process");
+    }
+
+    // Handle errors from backend
+    if (data.type === "error") {
+      const msg = escapeHtml(data.message || "AI error");
+      let details = "";
+      if (data.raw) details = `<details style="margin-top:6px"><summary>Raw</summary><pre style="margin:0">${escapeHtml(data.raw)}</pre></details>`;
+      appendBot(chat, `<strong>Error:</strong> ${msg}${details}`);
+      return;
+    }
+
+    // If backend returned success add action
+    const action = data.action || data.type || "";
+    // Friendly display message preference: message -> assistant_text -> fallbacks
+    const friendly = data.message || data.assistant_text || "";
+    if ((action === "add") || (data.type === "success" && data.action === "add")) {
+      // show friendly or constructed message
+      const taskName = data.task || data.task_name || "";
+      const time = data.reminder_time || data.reminder || data.date || "";
+      const display = escapeHtml(friendly || `✅ Task added: "${taskName}" ${time ? "at " + time : ""}`);
+      appendBot(chat, display);
+
+      // Give user a quick visual then refresh so the new task shows in the task list
+      setTimeout(() => window.location.reload(), 700);
+      return;
+    }
+
+    // Not an add action — show friendly message or JSON summary
+    if (friendly) {
+      appendBot(chat, escapeHtml(friendly));
+      return;
+    }
+
+    // If we have structured result, print a compact readable output
+    if (data.action || data.task || data.date || data.extra) {
+      const summary = [
+        data.action ? `<strong>Action:</strong> ${escapeHtml(data.action)}` : "",
+        data.task ? `<strong>Task:</strong> ${escapeHtml(data.task)}` : "",
+        data.date ? `<strong>Date:</strong> ${escapeHtml(data.date)}` : "",
+        data.extra ? `<strong>Extra:</strong> ${escapeHtml(data.extra)}` : ""
+      ].filter(Boolean).join("<br>");
+      appendBot(chat, summary || `<pre style="margin:0">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`);
+      return;
+    }
+
+    // Last fallback: show raw JSON prettified
+    appendBot(chat, `<pre style="margin:0">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`);
   } catch (err) {
-    chat.innerHTML += `<div class="mt-2"><b>AI:</b> Error contacting server: ${escapeHtml(err.message || err)}</div>`;
-    chat.scrollTop = chat.scrollHeight;
-    return;
-  }
+    // remove typing if still present
+    const t = document.getElementById(typingId);
+    if (t) t.remove();
 
-  // Create a readable message
-  let human = "";
-  if (data.type === "error") {
-    human = data.message || data.raw || "AI error";
-  } else {
-    human = prettyTaskFromResponse(data);
-  }
-
-  // show AI message
-  chat.innerHTML += `<div class="mt-2"><b>AI:</b> <pre style="display:inline;white-space:pre-wrap;margin:0">${escapeHtml(human)}</pre></div>`;
-  chat.scrollTop = chat.scrollHeight;
-
-  // if a task was added, refresh list after a short delay
-  // backend should return action:"add" on success (see backend patch)
-  if (data.action === "add" || (data.type === "success" && data.action === "add")) {
-    setTimeout(() => window.location.reload(), 700);
+    // If abort / timeout or fetch fail — show simulated helpful message
+    const msg = err.name === "AbortError" ? "Request timed out." : (err.message || "Network error");
+    appendBot(chat, `<strong>Network:</strong> ${escapeHtml(msg)} — showing simulated reply.`);
+    // Simulate a local response so you can continue working on frontend
+    appendBot(chat, `✅ (Simulated) I would add a task for: "${escapeHtml(text)}"`);
+    // (Note: no auto-reload because it's simulated)
+  } finally {
+    // re-enable input
+    isSending = false;
+    if (sendBtn) sendBtn.disabled = false;
+    inputEl.disabled = false;
+    inputEl.focus();
   }
 }
+
+/* === Enter to send === */
+document.getElementById("ai_input").addEventListener("keydown", function(e) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendToAI();
+  }
+});
+
+/* === Hook the send button === */
+const sendBtn = document.querySelector(".ai-send-btn");
+if (sendBtn) {
+  sendBtn.addEventListener("click", sendToAI);
+}
 </script>
+
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 </body>
 </html>
+
 
 
 
