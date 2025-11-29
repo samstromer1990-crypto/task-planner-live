@@ -3,6 +3,8 @@ import os
 import urllib.parse
 import requests
 import smtplib
+import dateparser
+
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone, timedelta
@@ -161,6 +163,36 @@ def ask_ai(user_text):
         "raw": resp.get("raw")
     }
 
+# ---------------------- Natural Language Date Parser ----------------------
+def parse_natural_date(text):
+    if not text:
+        return None
+    
+    dt = dateparser.parse(
+        text,
+        settings={"TIMEZONE": "Asia/Kolkata", "RETURN_AS_TIMEZONE_AWARE": False}
+    )
+    if not dt:
+        return None
+    
+    return dt.strftime("%Y-%m-%dT%H:%M")
+import dateparser
+
+def parse_natural_date(text):
+    if not text:
+        return None
+    
+    dt = dateparser.parse(
+        text,
+        settings={"TIMEZONE": "Asia/Kolkata", "RETURN_AS_TIMEZONE_AWARE": False}
+    )
+    if not dt:
+        return None
+    
+    # Convert to datetime-local format for HTML & Airtable
+    return dt.strftime("%Y-%m-%dT%H:%M")
+
+
 @app.route("/ai-process", methods=["POST"])
 def ai_process():
     payload = request.get_json(silent=True) or {}
@@ -175,12 +207,73 @@ def ai_process():
     except Exception as e:
         return jsonify({"type":"error","message":"AI reply not serializable","detail":str(e),"raw":str(ai_reply)})
 # ---------------------- Landing & Auth ----------------------
-@app.route("/")
-def index():
-    # If logged in, go to dashboard
-    if session.get("user"):
-        return redirect("/dashboard")
-    return render_template("landing.html")
+@app.route("/ai-process", methods=["POST"])
+
+def parse_natural_date(text):
+    if not text:
+        return None
+    
+    dt = dateparser.parse(
+        text,
+        settings={"TIMEZONE": "Asia/Kolkata", "RETURN_AS_TIMEZONE_AWARE": False}
+    )
+    if not dt:
+        return None
+    
+    return dt.strftime("%Y-%m-%dT%H:%M")
+def ai_process():
+    payload = request.get_json(silent=True) or {}
+    user_input = payload.get("user_input") or payload.get("text") or ""
+    if not user_input:
+        return jsonify({"type": "error", "message": "No text provided"}), 400
+
+    # 1. Ask AI
+    ai_reply = ask_ai(user_input)
+
+    # If AI error
+    if ai_reply.get("type") == "error":
+        return jsonify(ai_reply)
+
+    # Extract fields
+    action = ai_reply.get("action")
+    task_name = ai_reply.get("task")
+    date_text = ai_reply.get("date")
+
+    # 2. If action is not "add", just return JSON
+    if action != "add":
+        return jsonify(ai_reply)
+
+    # 3. Convert natural date → datetime-local format
+    reminder_time = parse_natural_date(date_text)
+
+    # 4. Save task to Airtable
+    url = airtable_url()
+    if not url:
+        return jsonify({"type": "error", "message": "Airtable not configured"})
+
+    payload = {
+        "fields": {
+            "Task Name": task_name,
+            "Completed": False,
+            "Reminder Local": reminder_time,
+            "Email": session["user"].get("email")
+        }
+    }
+
+    try:
+        resp = requests.post(url, json=payload, headers=at_headers(json=True))
+        if resp.status_code not in (200, 201):
+            return {"type": "error", "message": "Airtable save failed", "raw": resp.text}
+    except Exception as e:
+        return {"type": "error", "message": f"Airtable error: {e}"}
+
+    # 5. Return success
+    return jsonify({
+        "type": "success",
+        "message": "Task added successfully",
+        "task": task_name,
+        "reminder_time": reminder_time
+    })
 
 @app.route("/login")
 def login():
@@ -435,6 +528,7 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
 
 
 
