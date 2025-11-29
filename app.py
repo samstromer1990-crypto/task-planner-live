@@ -102,9 +102,7 @@ def check_task_ownership(record_id, user_email):
 # google-generativeai client
 try:
     import google.generativeai as genai
-    # FIX: Reverting to importing the 'types' module, and we will use the 'types.' prefix 
-    # everywhere to ensure the names are correctly resolved.
-    import google.generativeai.types as types 
+    # Removed the import of 'types' as we are no longer using Schema for structured output
     HAS_GEMINI_SDK = True
 except Exception:
     HAS_GEMINI_SDK = False
@@ -117,25 +115,19 @@ if GEMINI_API_KEY and HAS_GEMINI_SDK:
     except Exception:
         GEMINI_API_KEY = None
 
-# System prompt — enforce exact JSON output
-SYSTEM_PROMPT = "You are an AI Task Planner Assistant. Convert the user message into structured data for task creation. Respond only with the JSON object defined by the schema."
+# System prompt — enforce exact JSON output without using SDK schema
+SYSTEM_PROMPT = """You are an AI Task Planner Assistant. Convert the user message into structured data for task creation. 
+You MUST respond ONLY with a single JSON object. Do not include any text, reasoning, or markdown outside the JSON object.
+The JSON object must contain the following keys: 'action' (string, e.g., 'add', 'general'), 
+'task' (string, the name of the task, if applicable), 
+'date' (string, the natural language date string provided by the user), 
+and 'extra' (string, any leftover context or notes)."""
 
-# Define the required JSON schema for the output
-# FIX: Using the 'types.' prefix for Schema and Type everywhere
-TASK_SCHEMA = types.Schema(
-    type=types.Type.OBJECT,
-    properties={
-        "action": types.Schema(type=types.Type.STRING, description="The action to perform (e.g., 'add', 'general')."),
-        "task": types.Schema(type=types.Type.STRING, description="The name of the task, if applicable."),
-        "date": types.Schema(type=types.Type.STRING, description="The natural language date string provided by the user."),
-        "extra": types.Schema(type=types.Type.STRING, description="Any leftover context or notes.")
-    },
-    required=["action", "task", "date", "extra"]
-)
+# Removed TASK_SCHEMA definition
 
 
 def ask_ai_gemini(user_text):
-    """Call Gemini (gemini-2.0-flash) using structured output. 
+    """Call Gemini (gemini-2.0-flash) using prompt-based JSON output. 
     Returns dict: either {"type":"success","result": parsed_json}
     or {"type":"error","message": "...", "raw": "..."}."""
     
@@ -149,17 +141,10 @@ def ask_ai_gemini(user_text):
         response = model.generate_content(
             user_text,
             system_instruction=SYSTEM_PROMPT,
-            # FIX: Using the 'types.' prefix for GenerateContentConfig
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=TASK_SCHEMA,
-                temperature=0.2,
-                top_p=0.8,
-                max_output_tokens=512
-            )
+            # Removed the config block that enforced structured output
         )
         
-        # The response text is expected to be clean JSON due to the configuration
+        # The response text is now expected to be clean JSON based on the SYSTEM_PROMPT
         json_str = (response.text or "").strip()
         parsed = json.loads(json_str)
         return {"type": "success", "result": parsed}
