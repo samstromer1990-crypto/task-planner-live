@@ -193,14 +193,14 @@ def ai_process():
     "Task Name": task_name,
     "Completed": False,
     "Email": session["user"]["email"]
-}
-
-if reminder_time:
-    fields["Reminder Local"] = reminder_time
-
-payload = { "fields": fields }
-
-
+    }
+    
+    if reminder_time:
+       fields["Reminder Local"] = reminder_time
+    
+    payload = { "fields": fields }
+    
+    
     try:
         resp = requests.post(url, json=payload, headers=at_headers(json=True))
         if resp.status_code not in (200, 201):
@@ -477,6 +477,7 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
 
 
 
