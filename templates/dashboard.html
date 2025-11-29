@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -9,382 +9,430 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
 <style>
+/* --- DESIGN SYSTEM BASED ON DESIRED IMAGE --- */
 :root{
-  --bg: #f4f1fb;
-  --panel: #fff;
+  --bg: #f4f1fb; /* Light purple-gray background */
+  --panel: #fff; /* White cards */
+  --metric-card: #fff;
   --muted: #7b7f88;
-  --primary: #7c5cff;
+  --primary: #7c5cff; /* Main purple/accent */
   --accent: #bfa8ff;
   --radius: 14px;
-  --shadow: 0 12px 40px rgba(22,18,32,0.08);
-  --dark-bg: #0f1720;
-  --dark-panel: #1f2335;
-  --ease: cubic-bezier(.2,.9,.2,1);
+  --shadow: 0 12px 30px rgba(22,18,32,0.06);
+  --task-shadow: 0 2px 8px rgba(0,0,0,0.02);
 }
 
-/* Custom badges for priorities/status */
-.badge-status { font-size:11px; padding:3px 7px; border-radius:6px; font-weight:700; }
-.badge-pending { background-color: #ffe5e5; color: #cc3333; }
-.badge-completed { background-color: #e6ffe6; color: #33cc33; }
-.dark-mode .badge-pending { background-color: #3f1e1e; color: #ff9999; }
-.dark-mode .badge-completed { background-color: #1e3f1e; color: #99ff99; }
-
-/* base */
+/* Base */
 *{box-sizing:border-box}
 body{
   margin:0;
   font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
   background:var(--bg);
   color:#111827;
-  -webkit-font-smoothing:antialiased;
-  -moz-osx-font-smoothing:grayscale;
-  transition: background .24s var(--ease), color .24s var(--ease);
 }
 
-/* app layout */
-.app { min-height:100vh; display:flex; align-items:stretch; position:relative; }
-
-/* backdrop overlay */
-.backdrop {
-  position:fixed; inset:0; background: rgba(3,6,23,0.55);
-  opacity:0; visibility:hidden; transition:opacity .22s var(--ease);
-  z-index: 40;
+/* App Layout & Grid */
+.app-container { 
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
 }
-.backdrop.show { opacity:1; visibility:visible; }
+.header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+.main-grid {
+  display: grid;
+  grid-template-columns: 1fr 300px; /* Content (Task List) | Sidebar (Calendar) */
+  gap: 24px;
+}
+@media (max-width: 992px) {
+  .main-grid { grid-template-columns: 1fr; }
+}
 
-/* sidebar overlay slide */
-.sidebar {
-  position:fixed; left:0; top:0; bottom:0;
-  width: 260px;
-  background: linear-gradient(180deg, var(--panel), #fbf8ff);
-  border-right: 1px solid rgba(124,92,255,0.06);
-  padding:22px;
-  transform: translateX(-110%);
-  transition: transform .34s var(--ease), box-shadow .24s var(--ease);
-  z-index: 50;
+/* General Card Styles */
+.card-panel {
+  background:var(--panel);
+  border-radius:var(--radius);
+  padding:20px;
   box-shadow: var(--shadow);
-  display:flex; flex-direction:column; gap:14px;
-  will-change: transform;
+  margin-bottom: 24px;
 }
-.sidebar.open { transform: translateX(0); }
 
-/* sidebar items */
-.logo { display:flex; gap:10px; align-items:center; }
-.logo .mark { width:40px; height:40px; border-radius:10px; display:flex;align-items:center;justify-content:center; color:#fff; font-weight:700; background:linear-gradient(135deg,var(--primary),var(--accent)); box-shadow:0 8px 24px rgba(124,92,255,0.12); }
-.navlink { display:flex; gap:10px; align-items:center; padding:10px; border-radius:10px; color:var(--muted); text-decoration:none; font-weight:600; transition: background .18s var(--ease), color .18s var(--ease); }
-.navlink.active { color:var(--primary); background: linear-gradient(90deg, rgba(124,92,255,0.08), rgba(191,168,255,0.03)); }
+/* --- HERO/METRICS (Check your daily tasks & schedules) --- */
+.hero-container {
+  background: var(--metric-card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px;
+  margin-bottom: 24px;
+  display: flex;
+  gap: 24px;
+}
+.hero-main { flex: 1; }
+.hero-title { font-size: 20px; font-weight: 700; color: #111; margin: 0 0 4px; }
+.hero-subtitle { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
 
-/* container & header */
-.container-main { flex:1; padding:22px 36px; margin-left:0; width:100%; transition: filter .18s var(--ease); }
-.header { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:18px; }
-.header .controls { display:flex; gap:10px; align-items:center; }
+.metrics-row {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.metric {
+  flex: 1;
+  min-width: 100px;
+  max-width: 140px;
+  padding: 10px 0;
+}
+.metric h4 { margin: 0; font-weight: 700; }
+.metric small { color: var(--muted); font-size: 12px; }
 
-/* animated micro interactions */
-.btn { transition: transform .12s var(--ease), box-shadow .12s var(--ease); }
-.btn:hover { transform: translateY(-2px); }
-.btn:active { transform: translateY(0); }
-.btn-primary { background:var(--primary); border-color:var(--primary); }
-.btn-primary:hover { background: #6a49e6; border-color: #6a49e6; } /* Darker purple on hover */
-.btn-primary:focus { box-shadow: 0 0 0 0.25rem rgba(124, 92, 255, 0.25); }
+/* Progress Bar */
+.metric-progress {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.progress-bar-custom {
+  height: 10px;
+  background-color: #e9e6f3;
+  border-radius: 5px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  transition: width 0.5s ease-in-out;
+}
 
-/* hero */
-.hero { display:flex; gap:18px; background:linear-gradient(90deg, rgba(124,92,255,0.06), rgba(191,168,255,0.02)); padding:18px; border-radius:12px; box-shadow:var(--shadow); align-items:center; transform-origin: center top; animation: appearUp .36s var(--ease) both; }
-.metrics { display:flex; gap:12px; margin-top:14px; }
-.metric { background:var(--panel); border-radius:10px; padding:12px; box-shadow: var(--shadow); flex:1; transform-origin:center; }
-.metric h6{ margin:0; color:var(--muted); font-size:13px; font-weight:600; }
-.metric h3{ margin:6px 0 0; }
+/* Task Breakdown Chart Placeholder (Right side of Hero) */
+.chart-placeholder {
+  width: 140px;
+  background: #fdfdfd;
+  border-radius: 10px;
+  padding: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  text-align: center;
+}
+.chart-title { font-size: 12px; font-weight: 600; margin-bottom: 6px; color: #111; }
+.chart-area { 
+  height: 50px; 
+  background: #f0f0f0; 
+  border-radius: 6px;
+  /* Simple bar representation */
+  display: flex;
+  align-items: flex-end;
+  padding: 4px;
+  gap: 2px;
+}
+.bar { width: 10px; background: var(--primary); border-radius: 2px 2px 0 0; }
 
-/* grid layout */
-.grid { display:grid; grid-template-columns: 1fr 340px; gap:18px; margin-top:18px; }
-.content-col { display:flex; flex-direction:column; gap:14px; }
-
-/* card panel */
-.card-panel { background:var(--panel); border-radius:12px; padding:18px; box-shadow: var(--shadow); transform-origin:center; }
-
-/* task row with animation */
+/* --- TASK LIST STYLES --- */
 .task-row {
-  display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px; border-radius:10px; margin-bottom:10px;
-  background:linear-gradient(180deg,#fff,#fbf8ff);
-  transition: transform .18s var(--ease), box-shadow .18s var(--ease), opacity .18s var(--ease);
-  will-change: transform, opacity;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  border: 1px solid #eee;
+  box-shadow: var(--task-shadow);
 }
-.task-row:hover { transform: translateY(-4px); box-shadow:0 18px 40px rgba(22,18,32,0.06); }
+.task-row:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
 
-.task-left { display:flex; gap:10px; align-items:center; flex:1; }
-.task-info .title { font-weight:600; font-size:16px; }
-.task-info .sub { font-size:13px; color:var(--muted); }
-.task-row .completed .task-info .title { text-decoration: line-through; opacity: 0.6; }
-
-/* avatar for tasks (initials) */
-.avatar { width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; background:#ebe6f8; color:var(--primary); font-weight:700; font-size:14px; flex-shrink:0; }
-
-/* entry animation for elements */
-@keyframes appearUp {
-  from { opacity: 0; transform: translateY(10px) scale(.997); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+.task-details {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-grow: 1;
 }
-.animate-in { animation: appearUp .36s var(--ease) both; }
-
-/* fade+scale for modal content (Bootstrap uses fade) */
-.modal.fade .modal-dialog { transform: translateY(-6px) scale(.995); transition: transform .24s var(--ease); }
-.modal.fade.show .modal-dialog { transform: translateY(0) scale(1); }
-
-/* calendar */
-.calendar-widget-modern {
-  background:var(--panel); border-radius:12px; padding:18px; box-shadow: var(--shadow); transform-origin:center;
+.task-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
-.calendar-grid-modern {
-  display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 14px; margin-top: 10px;
+.initials-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #e9e6f3;
+  color: var(--primary);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
 }
-.calendar-day-modern {
-  padding: 6px 0; cursor: pointer; border-radius: 6px; transition: background-color 0.2s, transform 0.2s; font-weight: 500;
-}
-.calendar-day-modern:hover { background-color: var(--bg); transform: scale(1.05); }
-.calendar-day-modern.today {
-  background-color: var(--primary); color: #fff; font-weight: 700; box-shadow: 0 4px 10px rgba(124, 92, 255, 0.3);
-}
+.task-title-main { font-weight: 600; font-size: 15px; margin: 0; }
+.task-meta { font-size: 12px; color: var(--muted); }
+.task-meta .priority-low { color: green; font-weight: 600; }
+.task-meta .priority-med { color: orange; font-weight: 600; }
+.task-meta .priority-high { color: red; font-weight: 600; }
 
-/* small helpers */
-.small { font-size:13px; color:var(--muted); }
+/* Completed Task State */
+.task-row.completed .task-title-main { text-decoration: line-through; opacity: 0.7; }
+.task-row.completed .initials-avatar { background: #d4e8c1; color: #507b27; }
 
-/* dark mode */
-.dark-mode {
-  background: var(--dark-bg);
-  color:#e5e7eb;
+/* --- SIDEBAR CALENDAR STYLES --- */
+.sidebar-content {
+  position: sticky;
+  top: 20px; /* Offset from the top */
 }
-.dark-mode .sidebar { background: linear-gradient(180deg,var(--dark-panel), #0d1116); border-right-color: rgba(255,255,255,0.03); }
-.dark-mode .card-panel, .dark-mode .metric, .dark-mode .task-row, .dark-mode .calendar-day-modern { background: var(--dark-panel); border-color:#222631; color:#e5e7eb; box-shadow:none; }
-.dark-mode .task-info .sub, .dark-mode .small { color:#9ca3af; }
-.dark-mode .badge-pri { filter: brightness(.95); }
-.dark-mode .hero { background: linear-gradient(90deg, rgba(124,92,255,0.1), rgba(191,168,255,0.05)); }
-.dark-mode .avatar { background:#3f3261; color:var(--accent); }
-.dark-mode .btn-outline-secondary { color: #ccc; border-color: #333; }
-.dark-mode .btn-outline-secondary:hover { background: #333; color: #fff; }
-
-/* delete animation (fade out) */
-.fade-out { animation: fadeOut .26s ease forwards; }
-@keyframes fadeOut {
-  to { opacity:0; transform: translateY(-8px) scale(.995); height:0; margin:0; padding:0; }
+.calendar-widget {
+  padding: 16px;
+  background: var(--panel);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 24px;
 }
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.calendar-month { font-weight: 700; font-size: 16px; }
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 12px;
+}
+.calendar-day-header {
+  color: var(--muted);
+  padding-bottom: 6px;
+  font-weight: 600;
+}
+.calendar-day {
+  padding: 6px 0;
+  border-radius: 6px;
+  font-weight: 600;
+}
+.calendar-day.today {
+  background-color: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(124,92,255,0.4);
+}
+.calendar-day.event { border: 1px solid var(--accent); }
 
-/* responsive */
-@media (max-width:980px){ .grid{ grid-template-columns: 1fr; } .container-main{ padding:16px; } }
+/* --- BUTTONS & UTILITIES --- */
+.btn-primary-custom {
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  color: #fff;
+}
+.btn-primary-custom:hover { background: #6a49e6; border-color: #6a49e6; }
+.btn-sm-custom { padding: 4px 10px; font-size: 13px; border-radius: 6px; }
+
+/* Adjustments for Bootstrap date input */
+.datetime-input { max-width: 170px; font-size: 13px; }
 </style>
 </head>
 <body>
-<div class="app">
 
-    <aside class="sidebar" id="sidebar" aria-hidden="true">
-    <div class="logo">
-      <div class="mark">T</div>
-      <div>
-        <div style="font-weight:700">Task Planner</div>
-        <div style="font-size:12px;color:var(--muted)">Daily focus</div>
-      </div>
+<div class="app-container">
+  <div class="header-bar">
+    <h2 style="margin:0; font-weight:700">Welcome back <span id="userNameDisplay">👋</span></h2>
+    <div class="d-flex gap-2">
+      <button id="themeToggle" class="btn btn-outline-secondary btn-sm-custom">Dark</button>
+      <button class="btn btn-primary-custom btn-sm-custom" data-bs-toggle="modal" data-bs-target="#addTaskModal">+ Add Task</button>
     </div>
+  </div>
 
-    <div style="border-top:1px solid rgba(124,92,255,0.05); margin:14px 0; padding-top:14px;">
-      <div style="font-size:14px; font-weight:600; margin-bottom:10px;">Quick Stats</div>
-      <div class="card-panel p-3">
-                <div class="small">Total Tasks: <span class="fw-bold">{{ tasks|length }}</span></div>
-        <div class="small">Completed: <span class="text-success fw-bold">{{ tasks | selectattr('completed', 'equalto', true) | list | length }}</span></div>
-        <div class="small">Pending: <span class="text-danger fw-bold">{{ tasks | selectattr('completed', 'equalto', false) | list | length }}</span></div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div style="margin-bottom:18px;">
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert" style="border-radius:10px;">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
       </div>
-    </div>
+    {% endif %}
+  {% endwith %}
 
-    <div style="margin-top:auto;">
-      <a class="navlink" href="/logout">Logout</a>
-    </div>
-  </aside>
+    <div class="main-grid">
 
-    <div class="backdrop" id="backdrop" tabindex="-1" aria-hidden="true"></div>
+        <div>
+            <section class="hero-container">
+        <div class="hero-main">
+          <p style="color:var(--muted); font-size:14px; margin-bottom: 2px;">Today's Task</p>
+          <h3 class="hero-title">Check your daily tasks & schedules</h3>
+          <p class="hero-subtitle">Quick glance at progress and what's due today.</p>
 
-    <main class="container-main" id="mainContent">
-    <div class="header">
-      <div>
-                <h2 style="margin:0 0 6px">Welcome back, <span id="userNameDisplay"></span> 👋</h2>
-        <div style="color:var(--muted)">Here's your overview for today</div>
-      </div>
-
-      <div class="controls">
-        <button id="openSidebar" class="btn btn-outline-secondary btn-sm" title="Open menu">☰</button>
-        <button id="themeToggle" class="btn btn-outline-secondary btn-sm">Dark</button>
-        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addTaskModal">+ Add Task</button>
-      </div>
-    </div>
-
-        {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="animate-in" style="margin-bottom:18px;">
-          {% for category, message in messages %}
-            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert" style="border-radius:10px;">
-              {{ message }}
-              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          <div class="metrics-row">
+            <div class="metric">
+              <small>Total Tasks</small>
+              <h4 id="totalShow">{{ tasks|length }}</h4>
             </div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
-
-        <section class="hero">
-      <div style="flex:1">
-          <h3 style="margin:0 0 8px">Task Completion Summary</h3>
-          <div style="color:var(--muted)">Quick glance at progress and what's due.</div>
-
-        <div class="metrics">
-          <div class="metric"><h6>Total Tasks</h6><h3 id="totalShow">{{ tasks|length }}</h3></div>
-          <div class="metric"><h6>Completed</h6><h3 id="doneShow" class="text-success">{{ tasks | selectattr('completed', 'equalto', true) | list | length }}</h3></div>
-          <div class="metric"><h6>Pending</h6><h3 id="pendingShow" class="text-danger">{{ tasks | selectattr('completed', 'equalto', false) | list | length }}</h3></div>
-          <div class="metric">
-            <h6>Completion Rate</h6>
-            {% set total = tasks|length %}
-            {% set done = tasks | selectattr('completed', 'equalto', true) | list | length %}
-            {% set pct = (done / total * 100) | round(0) if total > 0 else 0 %}
-            <div class="progress" style="height:12px;border-radius:10px;margin-top:8px;">
-              <div id="progressBar" class="progress-bar" style="width:{{ pct }}%">{{ pct }}%</div>
+            <div class="metric">
+              <small>Completed</small>
+              <h4 id="doneShow" class="text-success">{{ tasks | selectattr('completed', 'equalto', true) | list | length }}</h4>
+            </div>
+            <div class="metric">
+              <small>Pending</small>
+              <h4 id="pendingShow" class="text-danger">{{ tasks | selectattr('completed', 'equalto', false) | list | length }}</h4>
+            </div>
+            <div class="metric-progress">
+              <small>Progress</small>
+              {% set total = tasks|length %}
+              {% set done = tasks | selectattr('completed', 'equalto', true) | list | length %}
+              {% set pct = (done / total * 100) | round(0) if total > 0 else 0 %}
+              <div class="progress-bar-custom mt-1">
+                <div class="progress-fill" style="width:{{ pct }}%"></div>
+              </div>
+              <small style="margin-top: 4px; font-weight:600;">{{ pct }}% Overall completion</small>
             </div>
           </div>
         </div>
-      </div>
-    </section>
-
-        <div class="grid">
-      <div class="content-col">
-        <div class="card-panel animate-in">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-            <h5 style="margin:0">Your Active Tasks</h5>
+        
+                <div class="chart-placeholder d-none d-md-block">
+          <div class="chart-title">This Week</div>
+          <div style="font-size:10px; color:var(--muted)">Task Breakdown</div>
+          <div class="chart-area mt-1">
+                        <div class="bar" style="height: 40%"></div>
+            <div class="bar" style="height: 60%"></div>
+            <div class="bar" style="height: 30%"></div>
+            <div class="bar" style="height: 80%"></div>
+            <div class="bar" style="height: 50%"></div>
+            <div class="bar" style="height: 20%"></div>
+            <div class="bar" style="height: 10%"></div>
           </div>
+          <div style="font-size:10px; color:var(--muted); margin-top:4px;">Mon Tue Wed Thu Fri Sat Sun</div>
+        </div>
+      </section>
 
-                    {% for task in tasks %}
-          <div class="task-row {% if task.completed %}completed{% endif %} animate-in">
-            <div class="task-left">
-              <div class="avatar">T</div>
-              <div class="task-info">
-                <div class="title">{{ task.task }}</div>
-                <div class="sub">
-                  {% if task.raw_reminder_time %}
-                  Due: {{ task.raw_reminder_time | replace('Z', '') | truncate(16, True, '') }}
-                  {% else %}
-                  No Reminder Set
-                  {% endif %}
-                </div>
+            <div>
+        <h4 style="margin-bottom: 12px;">Your Tasks</h4>
+
+        {% for task in tasks %}
+        <div class="task-row {% if task.completed %}completed{% endif %}">
+          <div class="task-details">
+                        <div class="initials-avatar">{{ task.task[:2] | upper }}</div>
+            
+            <div>
+              <p class="task-title-main">{{ task.task }}</p>
+              <div class="task-meta">
+                Due: 
+                {% if task.raw_reminder_time %}
+                  {{ task.raw_reminder_time | replace('Z', '') | truncate(10, True, '') }}
+                {% else %}
+                  No Date
+                {% endif %}
+                • <span class="priority-med">MED</span>
               </div>
             </div>
-
-            <div style="display:flex;gap:8px;align-items:center">
-              <form action="/update-time/{{ task.id }}" method="POST" class="d-flex align-items-center gap-2">
-                <input type="datetime-local" name="reminder_time"
-                       value="{{ task.raw_reminder_time | replace('Z', '') | truncate(16, True, '') }}"
-                       class="form-control form-control-sm" style="max-width:180px;">
-                <button class="btn btn-outline-secondary btn-sm" title="Save Reminder">💾</button>
-              </form>
-              
-              {% if not task.completed %}
-              <a href="/complete/{{ task.id }}" class="btn btn-primary btn-sm" title="Mark Complete">Done</a>
-              {% else %}
-              <span class="badge badge-status badge-completed">Completed</span>
-              {% endif %}
-
-              <a href="/delete/{{ task.id }}"
-               class="btn btn-sm btn-outline-danger"
-               onclick="return confirm('Are you sure you want to delete the task: {{ task.task | e }}?');"
-               title="Delete Task">
-               ❌
-              </a>
-            </div>
           </div>
-          {% endfor %}
 
-          {% if tasks|length == 0 %}
-          <div class="alert alert-light border text-center mt-3" style="border-radius:10px;">No tasks yet. Click "+ Add Task" to create one.</div>
-          {% endif %}
+          <div class="task-actions">
+            {% if not task.completed %}
+            <a href="/complete/{{ task.id }}" class="btn btn-primary-custom btn-sm-custom">Done</a>
+            {% else %}
+            <a href="/complete/{{ task.id }}" class="btn btn-outline-secondary btn-sm-custom">Undo</a>
+            {% endif %}
+
+            <a href="/delete/{{ task.id }}"
+             class="btn btn-outline-danger btn-sm-custom"
+             onclick="return confirm('Delete task: {{ task.task | e }}?');">
+              Delete
+            </a>
+          </div>
         </div>
 
-                <div class="card-panel animate-in">
-          <h5 style="margin:0 0 8px">AI Assistant 🤖</h5>
-          <p class="small">Ask anything. AI will help extract tasks or chat.</p>
+                <form action="/update-time/{{ task.id }}" method="POST" class="d-flex align-items-center gap-2 mb-3 ms-5">
+          <input type="datetime-local" name="reminder_time"
+                 value="{{ task.raw_reminder_time | replace('Z', '') | truncate(16, True, '') }}"
+                 class="form-control datetime-input">
+          <button class="btn btn-outline-secondary btn-sm-custom">Save Time</button>
+        </form>
+        {% endfor %}
+
+        {% if tasks|length == 0 %}
+        <div class="alert alert-light border text-center mt-3" style="border-radius:10px;">No tasks yet. Click "+ Add Task" to create one.</div>
+        {% endif %}
+        
+                <div class="card-panel mt-4">
+          <h5>AI Assistant 🤖</h5>
+          <p class="text-muted small">Ask anything. AI will help extract tasks or chat.</p>
 
           <div class="input-group mb-2">
             <input id="ai_input" class="form-control" placeholder="e.g., Remind me to study physics tomorrow at 4 PM">
-            <button class="btn btn-primary" onclick="sendToAI()">Ask</button>
+            <button class="btn btn-primary-custom" onclick="sendToAI()">Ask</button>
           </div>
 
-          <pre id="ai_output" class="p-3" style="min-height:100px; white-space: pre-wrap; background:var(--bg); border-radius:10px; border:1px solid rgba(124,92,255,0.05);"></pre>
+          <pre id="ai_output" class="p-3" style="min-height:100px; white-space: pre-wrap; background:var(--bg); border-radius:10px; border:1px solid #e9e6f3;"></pre>
+        </div>
+      </div>
+    </div>
+
+
+        <div class="sidebar-content">
+            <div class="calendar-widget">
+        <div class="calendar-header">
+          <span class="calendar-month">November 2025</span>
+          <small style="color:var(--primary); font-weight:600;">Add</small>
+        </div>
+
+        <div class="calendar-grid">
+          <div class="calendar-day-header">Mo</div>
+          <div class="calendar-day-header">Tu</div>
+          <div class="calendar-day-header">We</div>
+          <div class="calendar-day-header">Th</div>
+          <div class="calendar-day-header">Fr</div>
+          <div class="calendar-day-header">Sa</div>
+          <div class="calendar-day-header" style="color: #dc3545;">Su</div>
+                    <div class="calendar-day" style="grid-column: 6;">1</div>
+          <div class="calendar-day" style="color: #dc3545;">2</div>
+          <div class="calendar-day event">3</div>
+          <div class="calendar-day">4</div>
+          <div class="calendar-day">5</div>
+          <div class="calendar-day">6</div>
+          <div class="calendar-day event">7</div>
+          <div class="calendar-day">8</div>
+          <div class="calendar-day" style="color: #dc3545;">9</div>
+          <div class="calendar-day event">10</div>
+          <div class="calendar-day">11</div>
+          <div class="calendar-day">12</div>
+          <div class="calendar-day">13</div>
+          <div class="calendar-day">14</div>
+          <div class="calendar-day">15</div>
+          <div class="calendar-day" style="color: #dc3545;">16</div>
+          <div class="calendar-day">17</div>
+          <div class="calendar-day">18</div>
+          <div class="calendar-day">19</div>
+          <div class="calendar-day">20</div>
+          <div class="calendar-day">21</div>
+          <div class="calendar-day">22</div>
+          <div class="calendar-day" style="color: #dc3545;">23</div>
+          <div class="calendar-day">24</div>
+          <div class="calendar-day">25</div>
+          <div class="calendar-day">26</div>
+          <div class="calendar-day">27</div>
+          <div class="calendar-day today">28</div>
+          <div class="calendar-day">29</div>
+          <div class="calendar-day" style="color: #dc3545;">30</div>
         </div>
       </div>
 
-            <aside>
-                <div class="calendar-widget-modern animate-in" style="margin-bottom:12px">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <div>
-              <div style="color:var(--muted)" class="small">Current Date</div>
-              <div style="font-weight:700">November 2025</div>
-            </div>
-            <div class="small">Add Event</div>
           </div>
 
-          <div class="calendar-grid-modern">
-            <div style="color:var(--muted); font-weight:600;">Mo</div>
-            <div style="color:var(--muted); font-weight:600;">Tu</div>
-            <div style="color:var(--muted); font-weight:600;">We</div>
-            <div style="color:var(--muted); font-weight:600;">Th</div>
-            <div style="color:var(--muted); font-weight:600;">Fr</div>
-            <div class="calendar-day-modern" style="color:var(--muted); font-weight:600;">Sa</div>
-            <div class="calendar-day-modern" style="color:#dc3545; font-weight:600;">Su</div>
-                        <div class="calendar-day-modern" style="grid-column: 6;">1</div>
-            <div class="calendar-day-modern" style="color: #dc3545;">2</div>
-            <div class="calendar-day-modern">3</div>
-            <div class="calendar-day-modern">4</div>
-            <div class="calendar-day-modern">5</div>
-            <div class="calendar-day-modern">6</div>
-            <div class="calendar-day-modern">7</div>
-            <div class="calendar-day-modern">8</div>
-            <div class="calendar-day-modern" style="color: #dc3545;">9</div>
-            <div class="calendar-day-modern">10</div>
-            <div class="calendar-day-modern">11</div>
-            <div class="calendar-day-modern">12</div>
-            <div class="calendar-day-modern">13</div>
-            <div class="calendar-day-modern">14</div>
-            <div class="calendar-day-modern">15</div>
-            <div class="calendar-day-modern" style="color: #dc3545;">16</div>
-            <div class="calendar-day-modern">17</div>
-            <div class="calendar-day-modern">18</div>
-            <div class="calendar-day-modern">19</div>
-            <div class="calendar-day-modern">20</div>
-            <div class="calendar-day-modern">21</div>
-            <div class="calendar-day-modern">22</div>
-            <div class="calendar-day-modern" style="color: #dc3545;">23</div>
-            <div class="calendar-day-modern">24</div>
-            <div class="calendar-day-modern">25</div>
-            <div class="calendar-day-modern">26</div>
-            <div class="calendar-day-modern">27</div>
-            <div class="calendar-day-modern today">28</div>
-            <div class="calendar-day-modern">29</div>
-            <div class="calendar-day-modern" style="color: #dc3545;">30</div>
-          </div>
-        </div>
-
-                <div class="card-panel animate-in" style="text-align:center">
-          <div style="display:flex;align-items:center;gap:10px;justify-content:center">
-                        <div class="avatar" id="userAvatar" style="width:40px;height:40px;border-radius:50%;">U</div>
-            <div>
-              <div style="font-weight:700" id="userNameProfile">User</div>
-              <div style="color:var(--muted)" class="small">Task Planner User</div>
-            </div>
-          </div>
-        </div>
-      </aside>
-    </div>
-  </main>
-</div>
+  </div> </div>
 
 <div class="modal fade" id="addTaskModal" tabindex="-1">
-  <div class="modal-dialog modal-sm">
+  <div class="modal-dialog">
     <div class="modal-content" style="border-radius:12px">
       <div class="modal-header">
         <h5 class="modal-title">Add Task</h5>
         <button class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
+      </div>
 
       <form action="/add-task" method="POST">
         <div class="modal-body">
@@ -397,7 +445,7 @@ body{
 
         <div class="modal-footer">
           <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-primary">Add Task</button>
+          <button class="btn btn-primary-custom">Add Task</button>
         </div>
       </form>
     </div>
@@ -406,59 +454,40 @@ body{
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-// Function to generate initials from a name
-function getInitials(name) {
-    if (!name) return 'U';
-    const parts = name.trim().split(/\s+/);
-    if (parts.length === 1) return parts[0].substring(0, 1).toUpperCase();
-    return (parts[0].substring(0, 1) + parts[parts.length - 1].substring(0, 1)).toUpperCase();
-}
-
-// Function to handle the username prompt and storage
+// --- USERNAME LOGIC (Ensures the greeting works correctly) ---
 function checkAndSetUsername() {
     let userName = localStorage.getItem('taskPlannerUserName');
     
-    // If no name is found, prompt the user
+    // If no name is found, prompt the user (optional, can be disabled after first run)
     if (!userName) {
         let input = prompt("Welcome! Please enter your name:");
         if (input && input.trim() !== '') {
             userName = input.trim();
             localStorage.setItem('taskPlannerUserName', userName);
         } else {
-            userName = 'User'; // Default name
+            userName = 'there'; // Default name
         }
     }
     
-    // Update all displays
-    document.getElementById('userNameDisplay').textContent = userName;
-    document.getElementById('userNameProfile').textContent = userName;
-    document.getElementById('userAvatar').textContent = getInitials(userName);
+    // Display only the first name for a friendly greeting
+    const firstName = userName.split(' ')[0];
+    document.getElementById('userNameDisplay').textContent = firstName + " 👋";
 }
 
-// Sidebar and Theme Toggling
+// --- THEME TOGGLE AND ONLOAD ---
 document.addEventListener('DOMContentLoaded', ()=> {
   checkAndSetUsername(); // CALL THE NEW FUNCTION ON LOAD
 
-  const sidebar = document.getElementById('sidebar');
-  const backdrop = document.getElementById('backdrop');
-  const openSidebarBtn = document.getElementById('openSidebar');
   const themeToggle = document.getElementById('themeToggle');
-
-  // sidebar open/close handlers
-  function openSidebar(){ sidebar.classList.add('open'); backdrop.classList.add('show'); sidebar.setAttribute('aria-hidden','false'); }
-  function closeSidebar(){ sidebar.classList.remove('open'); backdrop.classList.remove('show'); sidebar.setAttribute('aria-hidden','true'); }
-  openSidebarBtn.addEventListener('click', openSidebar);
-  backdrop.addEventListener('click', closeSidebar);
-  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeSidebar(); });
-
-  // theme toggle
+  // theme toggle handler
   themeToggle.addEventListener('click', ()=>{
     document.body.classList.toggle('dark-mode');
     themeToggle.textContent = document.body.classList.contains('dark-mode') ? 'Light' : 'Dark';
   });
 });
 
-// Original AI Functionality
+
+// --- AI FUNCTION (Kept as is) ---
 async function sendToAI() {
     const text = document.getElementById("ai_input").value;
     const aiOutput = document.getElementById("ai_output");
@@ -489,10 +518,10 @@ async function sendToAI() {
 
         // If AI successfully added a task
         // Clean up the ISO string for display (remove Z and milliseconds)
-        const timeDisplay = data.reminder_time
-            ? data.reminder_time.replace('Z', '').substring(0, 16)
+        const timeDisplay = data.reminder_time 
+            ? data.reminder_time.replace('Z', '').substring(0, 16) 
             : 'None';
-
+            
         aiOutput.innerText =
             "✅ Task added:\n" +
             "Task: " + data.task + "\n" +
@@ -502,7 +531,7 @@ async function sendToAI() {
         setTimeout(() => {
             window.location.reload();
         }, 800);
-
+        
     } catch (e) {
         aiOutput.innerText = "❌ Network or unexpected error: " + e.message;
     }
