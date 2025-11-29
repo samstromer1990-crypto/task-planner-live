@@ -170,13 +170,16 @@ def ai_process():
         return jsonify(ai_reply)
 
     # AI result fields
-    action = ai_reply.get("action")
-    task_name = ai_reply.get("task")
-    date_text = ai_reply.get("date")
+    result = ai_reply.get("result", {})
+
+    action = result.get("action") 
+    task_name = result.get("task")
+    date_text = result.get("date")
+    extra = result.get("extra")
 
     # If action is NOT "add" → return AI result to front-end
     if action != "add":
-        return jsonify(ai_reply)
+        return jsonify(result)
 
     # Convert natural language date → datetime-local
     reminder_time = parse_natural_date(date_text)
@@ -471,4 +474,5 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
 
