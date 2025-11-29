@@ -158,56 +158,61 @@ def parse_natural_date(text):
 def ai_process():
     payload = request.get_json(silent=True) or {}
     user_input = payload.get("user_input") or payload.get("text") or ""
+
     if not user_input:
         return jsonify({"type": "error", "message": "No text provided"}), 400
 
-    # Ask Gemini
+    # 1. Ask Gemini
     ai_reply = ask_ai(user_input)
 
-    # If error from Gemini
+    # If Gemini failed → return error
     if ai_reply.get("type") == "error":
         return jsonify(ai_reply)
 
-    # ai_reply is the parsed JSON object returned by Gemini (from ask_ai)
-    # Expected shape: {"action": "...", "task": "...", "date": "...", "extra": "..."}
+    # AI result fields
     action = ai_reply.get("action")
     task_name = ai_reply.get("task")
     date_text = ai_reply.get("date")
 
-    # If it's not an add action, return AI's JSON to the UI
+    # If action is NOT "add" → return AI result to front-end
     if action != "add":
         return jsonify(ai_reply)
 
-    # Convert natural-language date -> ISO datetime-local (for Airtable/html)
+    # Convert natural language date → datetime-local
     reminder_time = parse_natural_date(date_text)
 
-    # Save to Airtable
+    # 4. Save to Airtable
     url = airtable_url()
     if not url:
         return jsonify({"type": "error", "message": "Airtable not configured"})
 
-    at_payload = {
+    payload = {
         "fields": {
             "Task Name": task_name,
             "Completed": False,
             "Reminder Local": reminder_time,
-            "Email": session.get("user", {}).get("email")
+            "Email": session["user"]["email"]
         }
     }
+
     try:
-        resp = requests.post(url, json=at_payload, headers=at_headers(json=True), timeout=15)
+        resp = requests.post(url, json=payload, headers=at_headers(json=True))
         if resp.status_code not in (200, 201):
-            return jsonify({"type": "error", "message": "Airtable save failed", "raw": resp.text})
+            return jsonify({
+                "type": "error",
+                "message": "Airtable save failed",
+                "raw": resp.text
+            })
     except Exception as e:
         return jsonify({"type": "error", "message": f"Airtable error: {e}"})
 
+    # 5. Return success response to front-end
     return jsonify({
         "type": "success",
-        "message": "Task added successfully",
+        "action": "add",
         "task": task_name,
         "reminder_time": reminder_time
     })
-
 # ---------------------- Landing & Auth ----------------------
 @app.route("/")
 def index():
@@ -466,3 +471,4 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
