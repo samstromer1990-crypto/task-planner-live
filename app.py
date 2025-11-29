@@ -188,11 +188,11 @@ def ai_process():
     url = airtable_url()
     if not url:
         return jsonify({"type": "error", "message": "Airtable not configured"})
-
+    
     fields = {
-    "Task Name": task_name,
-    "Completed": False,
-    "Email": session["user"]["email"]
+        "Task Name": task_name,
+        "Completed": False,
+        "Email": session["user"]["email"]
     }
     
     if reminder_time:
@@ -477,6 +477,7 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
 
 
 
