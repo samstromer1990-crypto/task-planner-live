@@ -16,6 +16,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from collections import Counter
 
+# --- IMPORTING THE IMPROVED AI LOGIC ---
+from gemini_improvement import ask_ai_gemini 
 # ---------------------- Load config ----------------------
 load_dotenv()
 app = Flask(__name__, static_folder="static", template_folder="templates")
@@ -102,7 +104,6 @@ def check_task_ownership(record_id, user_email):
 # google-generativeai client
 try:
     import google.generativeai as genai
-    # Removed the import of 'types' as we are no longer using Schema for structured output
     HAS_GEMINI_SDK = True
 except Exception:
     HAS_GEMINI_SDK = False
@@ -111,56 +112,22 @@ except Exception:
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY and HAS_GEMINI_SDK:
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
+        # We only configure here. The call logic is now in gemini_improvement.py
+        genai.configure(api_key=GEMINI_API_KEY) 
     except Exception:
         GEMINI_API_KEY = None
 
-# System prompt — enforce exact JSON output without using SDK schema
-SYSTEM_PROMPT = """You are an AI Task Planner Assistant. Convert the user message into structured data for task creation. 
-You MUST respond ONLY with a single JSON object. Do not include any text, reasoning, or markdown outside the JSON object.
-The JSON object must contain the following keys: 'action' (string, e.g., 'add', 'general'), 
-'task' (string, the name of the task, if applicable), 
-'date' (string, the natural language date string provided by the user), 
-and 'extra' (string, any leftover context or notes)."""
 
-# Removed TASK_SCHEMA definition
-
-
-def ask_ai_gemini(user_text):
-    """Call Gemini (gemini-2.0-flash) using prompt-based JSON output. 
-    Returns dict: either {"type":"success","result": parsed_json}
-    or {"type":"error","message": "...", "raw": "..."}."""
-    
-    global GEMINI_API_KEY, HAS_GEMINI_SDK 
-    
-    if not GEMINI_API_KEY or not HAS_GEMINI_SDK:
-        return {"type": "error", "message": "Gemini not configured on server or SDK missing."}
-
-    try:
-        model = genai.GenerativeModel("gemini-2.0-flash")
-        response = model.generate_content(
-            user_text,
-            system_instruction=SYSTEM_PROMPT,
-            # Removed the config block that enforced structured output
-        )
-        
-        # The response text is now expected to be clean JSON based on the SYSTEM_PROMPT
-        json_str = (response.text or "").strip()
-        parsed = json.loads(json_str)
-        return {"type": "success", "result": parsed}
-        
-    except Exception as e:
-        app.logger.error(f"Gemini request failed or JSON parsing error: {e}")
-        # Capture raw response text if the exception happened after the API call
-        raw_text = response.text if 'response' in locals() else 'N/A'
-        return {"type": "error", "message": f"AI request failed: {e}", "raw": raw_text}
+# The old SYSTEM_PROMPT is no longer needed, we use the one in gemini_improvement.py
+# SYSTEM_PROMPT = """..."""
 
 
 def ask_ai(user_text):
     """Wrapper for AI calls."""
     if not user_text:
         return {"type": "error", "message": "No input provided."}
-    return ask_ai_gemini(user_text)
+    # Pass necessary context to the helper function
+    return ask_ai_gemini(user_text, GEMINI_API_KEY, HAS_GEMINI_SDK, app.logger)
 
 # ---------------------- Natural language date parser ----------------------
 def parse_natural_date(text):
@@ -204,10 +171,18 @@ def ai_process():
     action = result.get("action") 
     task_name = result.get("task")
     date_text = result.get("date")
-
+    
+    # --- CONVERSATIONAL RESPONSE LOGIC ADDED HERE ---
     # If action is NOT "add" → return AI result to front-end (for general conversational responses)
     if action != "add":
-        return jsonify(result)
+        # We need to make sure the front-end has text to display. 
+        # The 'task' field is now repurposed for the AI's conversational response.
+        conversational_response = result.get("task") or "I'm here to help you manage your tasks!"
+        return jsonify({
+            "type": "success",
+            "action": "general",
+            "message": conversational_response,
+        })
 
     # Convert natural language date → datetime-local
     reminder_time = parse_natural_date(date_text) if date_text else None
@@ -248,7 +223,9 @@ def ai_process():
         "type": "success",
         "action": "add",
         "task": task_name,
-        "reminder_time": reminder_time
+        "reminder_time": reminder_time,
+        # Provide a friendly confirmation message for the front-end
+        "message": f"Task '{task_name}' has been added to your list!"
     })
     
 # ---------------------- Landing & Auth ----------------------
