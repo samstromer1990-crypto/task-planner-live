@@ -195,10 +195,10 @@ def ai_process():
     "Email": session["user"]["email"]
     }
     
-     if reminder_time:
+    if reminder_time:
          fields["Reminder Local"] = reminder_time
       
-        payload = { "fields": fields }
+    payload = { "fields": fields }
     
     try:
         resp = requests.post(url, json=payload, headers=at_headers(json=True))
@@ -476,6 +476,7 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
 
 
 
