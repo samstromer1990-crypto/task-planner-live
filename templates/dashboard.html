@@ -244,7 +244,7 @@
 
     
 <script>
-/* === Helper utilities === */
+/* ---------- Utilities ---------- */
 function escapeHtml(unsafe) {
   if (unsafe === null || unsafe === undefined) return "";
   return String(unsafe)
@@ -254,49 +254,66 @@ function escapeHtml(unsafe) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
-
 function scrollChat(chat) {
-  // smooth when possible
-  try { chat.scrollTo({ top: chat.scrollHeight, behavior: "smooth" }); }
-  catch (e) { chat.scrollTop = chat.scrollHeight; }
+  try { chat.scrollTo({ top: chat.scrollHeight, behavior: "smooth" }); } catch { chat.scrollTop = chat.scrollHeight; }
 }
-
 function appendUser(chat, text) {
-  const el = document.createElement("div");
-  el.className = "user";
-  el.innerHTML = escapeHtml(text);
-  chat.appendChild(el);
-  scrollChat(chat);
+  const el = document.createElement("div"); el.className = "user"; el.innerHTML = escapeHtml(text); chat.appendChild(el); scrollChat(chat);
 }
-
 function appendBot(chat, htmlContent) {
-  const wrapper = document.createElement("div");
-  wrapper.className = "bot";
-  wrapper.innerHTML = htmlContent;
-  chat.appendChild(wrapper);
-  scrollChat(chat);
+  const el = document.createElement("div"); el.className = "bot"; el.innerHTML = htmlContent; chat.appendChild(el); scrollChat(chat);
 }
 
-/* === Main send function === */
+/* ---------- Inject task card into DOM (visual, no network) ---------- */
+function injectTaskToDOM(taskName, reminderTime) {
+  const container = document.querySelector('.container-box');
+  if (!container) return;
+  const card = document.createElement('div');
+  card.className = 'task-card';
+  card.innerHTML = `
+    <div class="row g-2 align-items-center">
+      <div class="col-md-6">
+        <div class="task-title">${escapeHtml(taskName)}</div>
+        <div class="task-muted">⏳ Pending</div>
+        <form class="d-flex align-items-center gap-2 mt-2">
+          <input type="datetime-local" class="form-control form-control-sm dtl" value="${escapeHtml(reminderTime || '')}">
+          <button class="btn btn-outline-secondary btn-sm" type="button">Save</button>
+        </form>
+      </div>
+      <div class="col-md-6 text-md-end">
+        <a class="btn btn-primary-custom btn-sm" href="#">Mark Complete</a>
+      </div>
+    </div>
+  `;
+  const firstTask = container.querySelector('.task-card');
+  if (firstTask) container.insertBefore(card, firstTask);
+  else {
+    const aiCard = container.querySelector('.ai-card');
+    if (aiCard) container.insertBefore(card, aiCard);
+    else container.appendChild(card);
+  }
+  card.style.opacity = 0;
+  card.style.transform = 'translateY(8px)';
+  setTimeout(() => { card.style.transition = 'all .25s'; card.style.opacity = 1; card.style.transform = 'translateY(0)'; }, 10);
+}
+
+/* ---------- Main sendToAI (handles network + UI) ---------- */
 let isSending = false;
 async function sendToAI() {
   const inputEl = document.getElementById("ai_input");
   const chat = document.getElementById("ai_chat");
   const sendBtn = document.querySelector(".ai-send-btn");
-
   const text = (inputEl.value || "").trim();
   if (!text || isSending) return;
 
-  // UI: disable input while sending
   isSending = true;
   if (sendBtn) sendBtn.disabled = true;
   inputEl.disabled = true;
 
-  // Show user message
   appendUser(chat, text);
   inputEl.value = "";
 
-  // Show typing indicator
+  // Typing indicator
   const typingId = "ai-typing-indicator";
   const typingEl = document.createElement("div");
   typingEl.id = typingId;
@@ -305,12 +322,12 @@ async function sendToAI() {
   chat.appendChild(typingEl);
   scrollChat(chat);
 
-  // Perform fetch (with timeout fallback)
+  // request with timeout
   let controller = null;
-  let timeout = null;
   try {
     controller = new AbortController();
-    timeout = setTimeout(() => controller.abort(), 20000); // 20s timeout
+    const timeoutMs = 20000; // 20s
+    const t = setTimeout(() => controller.abort(), timeoutMs);
 
     const res = await fetch("/ai-process", {
       method: "POST",
@@ -319,53 +336,45 @@ async function sendToAI() {
       signal: controller.signal
     });
 
-    clearTimeout(timeout);
-    // remove typing
-    const t = document.getElementById(typingId);
-    if (t) t.remove();
+    clearTimeout(t);
+    const tEl = document.getElementById(typingId); if (tEl) tEl.remove();
 
     let data;
     try {
       data = await res.json();
     } catch (e) {
-      // If response isn't JSON, show raw text
       const raw = await res.text();
       appendBot(chat, `<pre style="margin:0">${escapeHtml(raw)}</pre>`);
-      throw new Error("Non-JSON response from /ai-process");
+      throw new Error("Non-JSON response");
     }
 
-    // Handle errors from backend
+    // Backend error
     if (data.type === "error") {
       const msg = escapeHtml(data.message || "AI error");
-      let details = "";
-      if (data.raw) details = `<details style="margin-top:6px"><summary>Raw</summary><pre style="margin:0">${escapeHtml(data.raw)}</pre></details>`;
+      const details = data.raw ? `<details style="margin-top:6px"><summary>Raw</summary><pre style="margin:0">${escapeHtml(data.raw)}</pre></details>` : "";
       appendBot(chat, `<strong>Error:</strong> ${msg}${details}`);
       return;
     }
 
-    // If backend returned success add action
+    // If action add and backend saved it, inject and reload
     const action = data.action || data.type || "";
-    // Friendly display message preference: message -> assistant_text -> fallbacks
+    if (action === "add" || (data.type === "success" && data.action === "add")) {
+      const taskName = data.task || "";
+      const time = data.reminder_time || data.date || "";
+      // inject visually now
+      injectTaskToDOM(taskName, time);
+      appendBot(chat, escapeHtml(data.message || `✅ Task added: "${taskName}" ${time ? "at " + time : ""}`));
+      // If backend succeeded, reload shortly to sync real list
+      if (data.type === "success" || data.message) {
+        setTimeout(() => window.location.reload(), 800);
+      }
+      return;
+    }
+
+    // Not an add action — friendly message if provided, else structured summary
     const friendly = data.message || data.assistant_text || "";
-    if ((action === "add") || (data.type === "success" && data.action === "add")) {
-      // show friendly or constructed message
-      const taskName = data.task || data.task_name || "";
-      const time = data.reminder_time || data.reminder || data.date || "";
-      const display = escapeHtml(friendly || `✅ Task added: "${taskName}" ${time ? "at " + time : ""}`);
-      appendBot(chat, display);
+    if (friendly) { appendBot(chat, escapeHtml(friendly)); return; }
 
-      // Give user a quick visual then refresh so the new task shows in the task list
-      setTimeout(() => window.location.reload(), 700);
-      return;
-    }
-
-    // Not an add action — show friendly message or JSON summary
-    if (friendly) {
-      appendBot(chat, escapeHtml(friendly));
-      return;
-    }
-
-    // If we have structured result, print a compact readable output
     if (data.action || data.task || data.date || data.extra) {
       const summary = [
         data.action ? `<strong>Action:</strong> ${escapeHtml(data.action)}` : "",
@@ -377,21 +386,15 @@ async function sendToAI() {
       return;
     }
 
-    // Last fallback: show raw JSON prettified
     appendBot(chat, `<pre style="margin:0">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`);
   } catch (err) {
-    // remove typing if still present
-    const t = document.getElementById(typingId);
-    if (t) t.remove();
-
-    // If abort / timeout or fetch fail — show simulated helpful message
+    // remove typing if present
+    const tEl = document.getElementById("ai-typing-indicator"); if (tEl) tEl.remove();
     const msg = err.name === "AbortError" ? "Request timed out." : (err.message || "Network error");
     appendBot(chat, `<strong>Network:</strong> ${escapeHtml(msg)} — showing simulated reply.`);
-    // Simulate a local response so you can continue working on frontend
     appendBot(chat, `✅ (Simulated) I would add a task for: "${escapeHtml(text)}"`);
-    // (Note: no auto-reload because it's simulated)
+    // simulated -> no reload
   } finally {
-    // re-enable input
     isSending = false;
     if (sendBtn) sendBtn.disabled = false;
     inputEl.disabled = false;
@@ -399,19 +402,12 @@ async function sendToAI() {
   }
 }
 
-/* === Enter to send === */
+/* ---------- Enter to send and button hook ---------- */
 document.getElementById("ai_input").addEventListener("keydown", function(e) {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    sendToAI();
-  }
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendToAI(); }
 });
-
-/* === Hook the send button === */
 const sendBtn = document.querySelector(".ai-send-btn");
-if (sendBtn) {
-  sendBtn.addEventListener("click", sendToAI);
-}
+if (sendBtn) sendBtn.addEventListener("click", sendToAI);
 </script>
 
 
@@ -419,6 +415,7 @@ if (sendBtn) {
 
 </body>
 </html>
+
 
 
 
