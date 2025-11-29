@@ -20,6 +20,7 @@ from collections import Counter
 
 # ---------------------- Load config ----------------------
 load_dotenv()
+# The Flask app instance MUST be named 'app' for Gunicorn to find it easily
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.logger.setLevel(logging.INFO) # Set default logging level
 
@@ -104,8 +105,13 @@ def check_task_ownership(record_id, user_email):
 # Conditional import for Google Generative AI SDK components
 try:
     import google.generativeai as genai
-    # Import Schema and Type directly from genai
-    from google.generativeai import Schema, Type
+    # Fix 1: Ensure Schema and Type are imported correctly from the top-level or types module
+    try:
+        from google.generativeai import Schema, Type
+    except ImportError:
+        # Fallback for slightly older SDK versions
+        from google.generativeai.types import Schema, Type
+        
     HAS_GEMINI_SDK = True
     
     # Define the necessary schema for the structured response
@@ -146,11 +152,16 @@ except ImportError:
     TASK_SCHEMA = None
     SYSTEM_INSTRUCTION = None
     HAS_GEMINI_SDK = False
-except AttributeError:
-    # Handle case where genai is imported but the required symbols are not directly available (older SDK)
-    app.logger.error("Failed to import Schema/Type directly from google.generativeai. This might be an older SDK version.")
+except NameError:
+    # NameError is often caused by Schema/Type not being defined/imported correctly
+    app.logger.error("NameError during AI configuration. Schema/Type import failed.")
     HAS_GEMINI_SDK = False
-    genai = None # Ensure it is None if it fails here
+    genai = None
+except AttributeError:
+    # Handle case where genai is imported but the required symbols are not directly available
+    app.logger.error("AttributeError during AI configuration. Schema/Type import failed from types module.")
+    HAS_GEMINI_SDK = False
+    genai = None 
 
 
 # Configure Gemini key if it exists
@@ -158,7 +169,8 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY and HAS_GEMINI_SDK:
     try:
         genai.configure(api_key=GEMINI_API_KEY) 
-    except Exception:
+    except Exception as e:
+        app.logger.error(f"Gemini configuration failed: {e}")
         GEMINI_API_KEY = None
 else:
     GEMINI_API_KEY = None
@@ -182,7 +194,7 @@ def ask_ai_structured(user_text: str, api_key: Optional[str], has_sdk: bool, log
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            # Generate content using the structured output method
+            # Fix 2: Wrap system_instruction and other generation parameters in the 'config' dictionary
             response = model.generate_content(
                 contents=[user_text],
                 config={
@@ -195,7 +207,9 @@ def ask_ai_structured(user_text: str, api_key: Optional[str], has_sdk: bool, log
             # The structured output is in response.text (a JSON string)
             if response and response.text:
                 try:
-                    result_json = json.loads(response.text)
+                    # Clean up the response text by removing potential markdown backticks/json tags
+                    text_content = response.text.strip().lstrip("```json").rstrip("```")
+                    result_json = json.loads(text_content)
                     return {"type": "success", "result": result_json}
                 except json.JSONDecodeError as e:
                     logger.error(f"Failed to parse AI JSON response: {response.text[:200]}... Error: {e}")
@@ -511,8 +525,9 @@ def notify_due_tasks():
     if url:
         try:
             r = requests.get(url, headers=at_headers(), params=params, timeout=15)
+            r.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
             records = r.json().get("records", [])
-        except Exception as e:
+        except requests.exceptions.RequestException as e:
             app.logger.error(f"Airtable notify fetch error: {e}")
             records = []
             
@@ -560,9 +575,13 @@ def fetch_all_records(email_filter=None):
     while True:
         resp = requests.get(url, headers=headers, params=params)
         try:
+            resp.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
             payload = resp.json()
-        except Exception as e:
-            app.logger.error(f"Airtable fetch_all_records json error: {e}, status {resp.status_code}, text {resp.text[:300]}")
+        except requests.exceptions.RequestException as e:
+            app.logger.error(f"Airtable fetch_all_records error: {e}")
+            break
+        except json.JSONDecodeError as e:
+            app.logger.error(f"Airtable fetch_all_records json error: {e}, text {resp.text[:300]}")
             break
             
         records.extend(payload.get("records", []))
@@ -631,9 +650,12 @@ def stats_json():
 
 # ---------------------- Scheduler ----------------------
 # Set up a background job to check for and send task reminders
-scheduler = BackgroundScheduler(timezone="UTC")
-scheduler.add_job(notify_due_tasks, IntervalTrigger(minutes=1), id="notify_due_tasks", replace_existing=True)
-scheduler.start()
+if all([SMTP_USER, SMTP_PASS, SMTP_HOST]): # Only start scheduler if email config is present
+    scheduler = BackgroundScheduler(timezone="UTC")
+    scheduler.add_job(notify_due_tasks, IntervalTrigger(minutes=1), id="notify_due_tasks", replace_existing=True)
+    scheduler.start()
+else:
+    app.logger.warning("Email configuration missing. Scheduler for reminders will not run.")
 
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
