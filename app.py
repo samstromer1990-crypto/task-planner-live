@@ -70,43 +70,41 @@ def at_headers(json=False):
         h["Content-Type"] = "application/json"
     return h
 
+
 # ---------------------- AI helper ----------------------
 import json
-# google-generativeai client (optional - only used if GEMINI_API_KEY is set)
+
+# google-generativeai client
 try:
     import google.generativeai as genai
     HAS_GEMINI_SDK = True
 except Exception:
     HAS_GEMINI_SDK = False
 
-# Configure keys (env must be set on Render / GitHub Actions)
+# Configure Gemini key
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY and HAS_GEMINI_SDK:
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-    except Exception as e:
-        print("Warning: failed to configure Gemini SDK:", e)
-        GEMINI_API_KEY = None  # disable if configure fails
+    except:
+        GEMINI_API_KEY = None
 
+# System prompt
+SYSTEM_PROMPT = """
+You are an AI Task Planner Assistant.
+Convert the user message into JSON in EXACTLY this format:
 
-HF_API_URL = None
+{
+  "action": "",
+  "task": "",
+  "date": "",
+  "extra": ""
+}
 
-# System prompt used for Gemini (and helpful to include when sending to HF as text)
-SYSTEM_PROMPT_LINES = [
-    "You are an AI Task Planner Assistant.",
-    "Your job is to read the user's message and convert it into structured JSON.",
-    "",
-    "Return ONLY this JSON EXACT format (no extra commentary):",
-    "{",
-    '  "action": "",',
-    '  "task": "",',
-    '  "date": "",',
-    '  "extra": ""',
-    "}",
-    "",
-    "If user asks something unrelated, return action='general' and explain in extra."
-]
-SYSTEM_PROMPT = "\n".join(SYSTEM_PROMPT_LINES)
+If the user message is not a task, return action="general".
+No extra explanation OUTSIDE the JSON.
+"""
+
 def ask_ai_gemini(user_text):
     prompt = f"{SYSTEM_PROMPT}\nUser: {user_text}\nAssistant:"
 
@@ -131,37 +129,70 @@ def ask_ai_gemini(user_text):
             "raw": str(e)
         }
 
-    # Extract JSON safely
+    # Extract JSON from output
     try:
         start = txt.find("{")
         end = txt.rfind("}") + 1
         json_str = txt[start:end]
         parsed = json.loads(json_str)
         return {"type": "success", "result": parsed}
-
-    except Exception:
+    except:
         return {"type": "error", "message": "Gemini returned non-JSON output", "raw": txt}
+
+
 def ask_ai(user_text):
     """Gemini only — no HF fallback."""
     if not user_text:
         return {"type": "error", "message": "No input provided."}
 
-    # Ensure Gemini is available
     if not GEMINI_API_KEY or not HAS_GEMINI_SDK:
         return {"type": "error", "message": "Gemini is not configured on the server."}
 
     resp = ask_ai_gemini(user_text)
 
-    # If Gemini returned success
     if resp.get("type") == "success":
         return resp.get("result")
 
-    # If Gemini returned error
     return {
         "type": "error",
         "message": resp.get("message", "Gemini failed"),
         "raw": resp.get("raw")
     }
+
+
+# Natural language → datetime-local
+def parse_natural_date(text):
+    if not text:
+        return None
+
+    dt = dateparser.parse(
+        text,
+        settings={"TIMEZONE": "Asia/Kolkata", "RETURN_AS_TIMEZONE_AWARE": False}
+    )
+    if not dt:
+        return None
+
+    return dt.strftime("%Y-%m-%dT%H:%M")
+
+
+# ---------------------- AI processing endpoint ----------------------
+@app.route("/ai-process", methods=["POST"])
+def ai_process():
+    payload = request.get_json(silent=True) or {}
+    user_input = payload.get("user_input") or payload.get("text") or ""
+    if not user_input:
+        return jsonify({"type": "error", "message": "No text provided"}), 400
+
+    # Ask Gemini
+    ai_reply = ask_ai(user_input)
+
+    if ai_reply.get("type") == "error":
+        return jsonify(ai_reply)
+
+    # Extract JSON
+    action = ai_reply.get("action")
+    task_name = ai_reply.get("task")
+    date_text = ai_
 
 # ---------------------- Natural Language Date Parser ----------------------
 def parse_natural_date(text):
@@ -528,6 +559,7 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
 
 
 
