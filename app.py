@@ -11,7 +11,7 @@ import requests
 # Load environment variables for security.
 # IMPORTANT: You must set these variables in your deployment environment (e.g., Render, Canvas environment variables).
 SECRET_KEY = os.environ.get('SECRET_KEY', 'default_secret_key_change_me')
-GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID') # FIX: Corrected variable name
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 FIRESTORE_URL = os.environ.get('FIRESTORE_URL', 'http://firestore-emulator:8080/v1/projects/project-id/databases/(default)/documents')
 
@@ -197,8 +197,10 @@ def dashboard():
     sorted_tasks = sorted(tasks, key=lambda x: (x.get('completed', False), x.get('raw_reminder_time', '')))
     
     # Placeholder for displaying user info
-    user_info = {'name': user['name']}
+    # Assuming 'picture' is a mock field that might be useful in the template
+    user_info = {'name': user['name'], 'picture': None} 
 
+    # Note: We must also provide 'login.html' template for the app to start correctly.
     return render_template('dashboard.html', user=user_info, tasks=sorted_tasks)
 
 @app.route('/add_task', methods=['POST'])
@@ -214,15 +216,8 @@ def add_task():
 
     task_data = {'task': task_name}
     if reminder_time_str:
-        # Convert local time string to UTC timestamp (mocking server behavior)
-        try:
-            # Note: Flask's default datetime-local format usually lacks timezone, 
-            # so we'll treat it as naive and save it as-is for display/mock reminder time.
-            # In a production app, robust timezone handling is mandatory.
-            task_data['raw_reminder_time'] = reminder_time_str
-        except Exception:
-            flash('Invalid date/time format for reminder.', 'danger')
-            return redirect(url_for('dashboard'))
+        # Note: We save the raw datetime-local string as 'raw_reminder_time' for display.
+        task_data['raw_reminder_time'] = reminder_time_str
     
     add_record('tasks', task_data)
     flash('Task added successfully!', 'success')
@@ -248,6 +243,24 @@ def delete_task(record_id):
         flash('Task not found.', 'danger')
     return redirect(url_for('dashboard'))
 
+@app.route('/update_time/<record_id>', methods=['POST'])
+@login_required
+def update_time(record_id):
+    """Updates the reminder time for an existing task."""
+    reminder_time_str = request.form.get('reminder_time')
+    
+    # If reminder_time_str is empty, the user cleared the time input.
+    if not reminder_time_str:
+        update_data = {'raw_reminder_time': None}
+    else:
+        update_data = {'raw_reminder_time': reminder_time_str}
+
+    if update_record('tasks', record_id, update_data):
+        flash('Task reminder time updated successfully!', 'success')
+    else:
+        flash('Could not find or update the task.', 'danger')
+        
+    return redirect(url_for('dashboard'))
 
 # --- AI Assistant Route ---
 
@@ -298,7 +311,17 @@ def ai_process():
             return jsonify({"type": "error", "message": "Could not extract a valid task description from your request."})
 
         # Process reminder_time for display/mock storage
-        raw_reminder_time = reminder_time if reminder_time else None
+        # The AI returns ISO 8601 (with Z). We need to convert it to the browser's datetime-local format (YYYY-MM-DDTHH:MM)
+        raw_reminder_time = None
+        if reminder_time and reminder_time != "null":
+            try:
+                # Parse ISO 8601 (e.g., 2024-06-07T15:00:00Z)
+                dt_obj = datetime.strptime(reminder_time.replace('Z', ''), '%Y-%m-%dT%H:%M:%S')
+                # Format for datetime-local input
+                raw_reminder_time = dt_obj.strftime('%Y-%m-%dT%H:%M')
+            except ValueError:
+                # If parsing fails, use the raw string or None
+                raw_reminder_time = None 
         
         task_data = {'task': task, 'raw_reminder_time': raw_reminder_time}
         add_record('tasks', task_data)
@@ -308,7 +331,7 @@ def ai_process():
             "type": "success",
             "action": "add",
             "task": task,
-            "reminder_time": raw_reminder_time,
+            "reminder_time": reminder_time,
             "message": "Task added successfully!"
         })
 
@@ -342,4 +365,3 @@ if __name__ == '__main__':
     # export GEMINI_API_KEY='your-gemini-api-key'
     
     app.run(debug=True)
-    
