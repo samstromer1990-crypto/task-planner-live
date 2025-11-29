@@ -6,3 +6,4 @@ authlib
 google-generativeai==0.8.2
 apscheduler
 dateparser
+google-auth-oauthlib
