@@ -130,40 +130,50 @@ Convert the user message into JSON in EXACTLY this format (no extra text outside
 If the user message is not a task command, return action="general".
 """
 
+from google.generativeai import types
+
+# Define the required JSON schema for the output
+TASK_SCHEMA = types.Schema(
+    type=types.Type.OBJECT,
+    properties={
+        "action": types.Schema(type=types.Type.STRING, description="The action to perform (e.g., 'add', 'general')."),
+        "task": types.Schema(type=types.Type.STRING, description="The name of the task, if applicable."),
+        "date": types.Schema(type=types.Type.STRING, description="The natural language date string provided by the user."),
+        "extra": types.Schema(type=types.Type.STRING, description="Any leftover context or notes.")
+    },
+    required=["action", "task", "date", "extra"]
+)
+
 def ask_ai_gemini(user_text):
-    """Call Gemini (gemini-2.0-flash). Returns dict: either {"type":"success","result": parsed_json}
-    or {"type":"error","message": "...", "raw": "..."}."""
-    prompt = f"{SYSTEM_PROMPT}\nUser: {user_text}\nAssistant:"
+    """Call Gemini (gemini-2.0-flash) with structured output."""
+    # The system prompt can be simpler, focusing on the persona, not the format
+    SYSTEM_PROMPT = "You are an AI Task Planner Assistant. Convert the user message into structured data for planning."
+    
     if not GEMINI_API_KEY or not HAS_GEMINI_SDK:
         return {"type": "error", "message": "Gemini not configured on server."}
 
     try:
         model = genai.GenerativeModel("gemini-2.0-flash")
         response = model.generate_content(
-            prompt,
-            generation_config={
-                "temperature": 0.2,
-                "top_p": 0.8,
-                "max_output_tokens": 512
-            }
+            user_text, # The prompt should just be the user's text when using a system instruction
+            system_instruction=SYSTEM_PROMPT,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=TASK_SCHEMA,
+                temperature=0.2,
+                top_p=0.8,
+                max_output_tokens=512
+            )
         )
-        txt = (response.text or "").strip()
+        
+        # The response text will now be a clean JSON string
+        json_str = (response.text or "").strip()
+        parsed = json.loads(json_str)
+        return {"type": "success", "result": parsed}
+        
     except Exception as e:
         app.logger.error(f"Gemini request failed: {e}")
         return {"type": "error", "message": f"Gemini request failed: {e}", "raw": str(e)}
-
-    # Extract JSON substring and parse (note: using JSON schema is preferred but kept simple here)
-    try:
-        start = txt.find("{")
-        end = txt.rfind("}") + 1
-        if start == -1 or end == 0 or end <= start:
-            return {"type": "error", "message": "Gemini returned no JSON", "raw": txt}
-        json_str = txt[start:end]
-        parsed = json.loads(json_str)
-        return {"type": "success", "result": parsed}
-    except Exception as e:
-        app.logger.error(f"Failed to parse Gemini JSON: {e}")
-        return {"type": "error", "message": "Failed to parse Gemini JSON", "raw": txt}
 
 def ask_ai(user_text):
     """Wrapper for AI calls."""
@@ -579,3 +589,4 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
