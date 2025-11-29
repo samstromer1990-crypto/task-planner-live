@@ -177,7 +177,7 @@ def login():
         return redirect(url_for('dashboard'))
     
     # Pass GOOGLE_CLIENT_ID to the template for potential OAuth integration (though only mock is implemented here)
-    return render_template('login.html', google_client_id=GOOGLE_CLIENT_ID)
+    return render_template('landing.html', google_client_id=GOOGLE_CLIENT_ID)
 
 @app.route('/logout')
 def logout():
@@ -365,3 +365,4 @@ if __name__ == '__main__':
     # export GEMINI_API_KEY='your-gemini-api-key'
     
     app.run(debug=True)
+
