@@ -1,10 +1,8 @@
-Flask
+flask
+gunicorn
+python-dotenv
 requests
 authlib
-gunicorn
-google-generativeai
+google-generativeai==0.8.2
 apscheduler
 dateparser
-google-cloud-firestore
-python-dateutil
-
