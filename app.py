@@ -102,9 +102,9 @@ def check_task_ownership(record_id, user_email):
 # google-generativeai client
 try:
     import google.generativeai as genai
-    # FIX: Cleaned up imports to directly define Schema, Type, and GenerateContentConfig 
-    # This resolves the previous NameError by ensuring 'Schema' is in scope.
-    from google.generativeai.types import Schema, Type, GenerateContentConfig
+    # FIX: Reverting to importing the 'types' module, and we will use the 'types.' prefix 
+    # everywhere to ensure the names are correctly resolved.
+    import google.generativeai.types as types 
     HAS_GEMINI_SDK = True
 except Exception:
     HAS_GEMINI_SDK = False
@@ -121,13 +121,14 @@ if GEMINI_API_KEY and HAS_GEMINI_SDK:
 SYSTEM_PROMPT = "You are an AI Task Planner Assistant. Convert the user message into structured data for task creation. Respond only with the JSON object defined by the schema."
 
 # Define the required JSON schema for the output
-TASK_SCHEMA = Schema(
-    type=Type.OBJECT,
+# FIX: Using the 'types.' prefix for Schema and Type everywhere
+TASK_SCHEMA = types.Schema(
+    type=types.Type.OBJECT,
     properties={
-        "action": Schema(type=Type.STRING, description="The action to perform (e.g., 'add', 'general')."),
-        "task": Schema(type=Type.STRING, description="The name of the task, if applicable."),
-        "date": Schema(type=Type.STRING, description="The natural language date string provided by the user."),
-        "extra": Schema(type=Type.STRING, description="Any leftover context or notes.")
+        "action": types.Schema(type=types.Type.STRING, description="The action to perform (e.g., 'add', 'general')."),
+        "task": types.Schema(type=types.Type.STRING, description="The name of the task, if applicable."),
+        "date": types.Schema(type=types.Type.STRING, description="The natural language date string provided by the user."),
+        "extra": types.Schema(type=types.Type.STRING, description="Any leftover context or notes.")
     },
     required=["action", "task", "date", "extra"]
 )
@@ -148,8 +149,8 @@ def ask_ai_gemini(user_text):
         response = model.generate_content(
             user_text,
             system_instruction=SYSTEM_PROMPT,
-            # FIX: Use GenerateContentConfig directly, as it is now imported explicitly.
-            config=GenerateContentConfig(
+            # FIX: Using the 'types.' prefix for GenerateContentConfig
+            config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=TASK_SCHEMA,
                 temperature=0.2,
