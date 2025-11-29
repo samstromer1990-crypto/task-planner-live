@@ -102,13 +102,9 @@ Convert the user message into JSON in EXACTLY this format (no extra text outside
 If the user message is not a task command, return action="general".
 """
 
-import re
-
 def ask_ai_gemini(user_text):
-    """Call Gemini (gemini-2.0-flash). Returns dict:
-       either {"type":"success","result": parsed_json, "assistant_text": "...", "raw": "..."}
-       or {"type":"error","message": "...", "raw": "..."}.
-    """
+    """Call Gemini (gemini-2.0-flash). Returns dict: either {"type":"success","result": parsed_json}
+    or {"type":"error","message": "...", "raw": "..."}."""
     prompt = f"{SYSTEM_PROMPT}\nUser: {user_text}\nAssistant:"
     if not GEMINI_API_KEY or not HAS_GEMINI_SDK:
         return {"type": "error", "message": "Gemini not configured on server."}
@@ -126,31 +122,18 @@ def ask_ai_gemini(user_text):
         txt = (response.text or "").strip()
     except Exception as e:
         return {"type": "error", "message": f"Gemini request failed: {e}", "raw": str(e)}
-   
-    # Try to find the first JSON object in the response using a safe regex
-    try:
-        match = re.search(r"\{[\s\S]*\}", txt)   # DOTALL-safe
-        if match:
-            json_str = match.group(0)
-            try:
-                parsed = json.loads(json_str)
-            except Exception as e:
-                return {"type": "error", "message": f"Failed to parse JSON from Gemini: {e}", "raw": txt}
-            # Normalise keys to expected defaults
-            parsed.setdefault("action", "general")
-            parsed.setdefault("task", "")
-            parsed.setdefault("date", "")
-            parsed.setdefault("extra", "")
-            # Also include assistant_text: the non-JSON remainder (if any) for user-friendly message
-            remainder = (txt[:match.start()] + txt[match.end():]).strip()
-            assistant_text = remainder if remainder else txt
-            return {"type": "success", "result": parsed, "assistant_text": assistant_text, "raw": txt}
-        else:
-            # No JSON found — return an error but include raw text so you can debug / show a message
-            return {"type": "error", "message": "Gemini returned no JSON", "raw": txt}
-    except Exception as e:
-        return {"type": "error", "message": f"Parsing error: {e}", "raw": txt}
 
+    # Extract JSON substring and parse
+    try:
+        start = txt.find("{")
+        end = txt.rfind("}") + 1
+        if start == -1 or end == 0 or end <= start:
+            return {"type": "error", "message": "Gemini returned no JSON", "raw": txt}
+        json_str = txt[start:end]
+        parsed = json.loads(json_str)
+        return {"type": "success", "result": parsed}
+    except Exception as e:
+        return {"type": "error", "message": "Failed to parse Gemini JSON", "raw": txt}
 
 def ask_ai(user_text):
     """Wrapper for AI calls."""
@@ -182,59 +165,44 @@ def ai_process():
     # 1. Ask Gemini
     ai_reply = ask_ai(user_input)
 
-    # If Gemini failed → return error (include raw for debugging)
+    # If Gemini failed → return error
     if ai_reply.get("type") == "error":
-        return jsonify({"type": "error", "message": ai_reply.get("message", "AI error"), "raw": ai_reply.get("raw", "")})
+        return jsonify(ai_reply)
 
     # AI result fields
     result = ai_reply.get("result", {})
-    assistant_text = ai_reply.get("assistant_text", "")
 
-    action = result.get("action", "general")
-    task_name = result.get("task", "")
-    date_text = result.get("date", "")
-    extra = result.get("extra", "")
+    action = result.get("action") 
+    task_name = result.get("task")
+    date_text = result.get("date")
+    extra = result.get("extra")
 
-    # If action is NOT "add" → return a friendly AI reply (so front-end can display a message)
+    # If action is NOT "add" → return AI result to front-end
     if action != "add":
-        # Construct a readable message for the UI
-        message = assistant_text or ""
-        if not message:
-            # fallback friendly summary
-            if action == "general":
-                message = extra or "I understood this as a general request."
-            else:
-                message = f"Action: {action}. Task: {task_name} {('on ' + date_text) if date_text else ''}".strip()
-        return jsonify({
-            "type": "ai_response",
-            "action": action,
-            "task": task_name,
-            "date": date_text,
-            "extra": extra,
-            "message": message
-        })
+        return jsonify(result)
 
     # Convert natural language date → datetime-local
     reminder_time = parse_natural_date(date_text) if date_text else None
 
-    # Save to Airtable
+    # 4. Save to Airtable
     url = airtable_url()
     if not url:
         return jsonify({"type": "error", "message": "Airtable not configured"})
 
     fields = {
-        "Task Name": task_name,
-        "Completed": False,
-        "Email": session.get("user", {}).get("email")
-    }
+    "Task Name": task_name,
+    "Completed": False,
+    "Email": session["user"]["email"]
+}
 
-    if reminder_time:
-        fields["Reminder Local"] = reminder_time
+if reminder_time:
+    fields["Reminder Local"] = reminder_time
 
-    payload = {"fields": fields}
+payload = { "fields": fields }
+
 
     try:
-        resp = requests.post(url, json=payload, headers=at_headers(json=True), timeout=15)
+        resp = requests.post(url, json=payload, headers=at_headers(json=True))
         if resp.status_code not in (200, 201):
             return jsonify({
                 "type": "error",
@@ -244,15 +212,13 @@ def ai_process():
     except Exception as e:
         return jsonify({"type": "error", "message": f"Airtable error: {e}"})
 
-    # 5. Return success response to front-end with a friendly message
+    # 5. Return success response to front-end
     return jsonify({
         "type": "success",
         "action": "add",
         "task": task_name,
-        "reminder_time": reminder_time,
-        "message": f'Task "{task_name}" scheduled{(" at " + reminder_time) if reminder_time else ""}.'
+        "reminder_time": reminder_time
     })
-
 # ---------------------- Landing & Auth ----------------------
 @app.route("/")
 def index():
@@ -511,9 +477,6 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
-
-
-
 
 
 
