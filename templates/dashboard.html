@@ -2,302 +2,281 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PlanHub - Dashboard</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Your Task Planner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+
+
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
-        .card { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06); }
-        .flash-message { animation: fadeInOut 5s ease-in-out forwards; }
-        @keyframes fadeInOut {
-            0% { opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 1; }
-            100% { opacity: 0; display: none; }
+        :root {
+            --bg: #fafafa;
+            --card: #ffffff;
+            --border: #e6e6e6;
+            --text: #333;
+            --muted: #666;
+            --primary: #0d6efd;
+            --primary-dark: #0048c6;
         }
 
-        /* Custom transition for sidebar */
-        #sidebar {
-            transition: transform 0.3s ease-in-out;
-            z-index: 50; /* Above everything else */
-        }
-        .main-content {
-            transition: margin-left 0.3s ease-in-out;
-            min-height: 100vh;
+        body {
+            background: var(--bg);
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+            color: var(--text);
         }
 
-        /* Tailwind utility for open state (desktop) */
-        @media (min-width: 1024px) {
-            .sidebar-open .main-content {
-                margin-left: 256px; /* Width of sidebar (w-64) */
-            }
+        .nav-container {
+            background: #fff;
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-title { font-size: 18px; font-weight: 600; }
+
+        .user-info { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
+        .user-info img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+
+        .container-box { max-width: 880px; margin: 28px auto 60px; padding: 0 12px; }
+
+        .task-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 10px;
+            transition: border-color .2s ease, box-shadow .2s ease;
+        }
+
+        .task-card:hover { border-color: #d5d5d5; box-shadow: 0 2px 10px rgba(0,0,0,.04); }
+
+        .task-title { font-weight: 600; }
+        .task-muted { color: var(--muted); font-size: 13px; }
+        .completed { opacity: .55; text-decoration: line-through; }
+
+        .btn-primary-custom {
+            background: var(--primary);
+            border: 1px solid var(--primary);
+            color: #fff;
+        }
+
+        .btn-primary-custom:hover { 
+            background: var(--primary-dark); 
+            border-color: var(--primary-dark);
+            color: #fff;
+        }
+
+        .dtl { max-width: 210px; }
+
+        .card { border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+
+        /* Custom styling for flash messages */
+        .flash-message-container {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            z-index: 1050; /* Above modals */
+            width: 300px;
         }
     </style>
 </head>
-<body class="sidebar-closed">
+<body>
 
-    <!-- Sidebar Component -->
-    <div id="sidebar" class="fixed top-0 left-0 w-64 h-full bg-gray-800 text-white transform -translate-x-full lg:translate-x-0 lg:shadow-xl">
-        <div class="p-6">
-            <h2 class="text-2xl font-bold text-indigo-400 mb-8">PlanHub</h2>
-            <nav class="space-y-2">
-                <a href="{{ url_for('dashboard') }}" class="flex items-center space-x-3 p-3 rounded-lg bg-gray-700 text-white hover:bg-gray-700 transition duration-150">
-                    <i class="fas fa-th-large"></i>
-                    <span>Dashboard</span>
-                </a>
-                <a href="#" class="flex items-center space-x-3 p-3 rounded-lg text-gray-300 hover:bg-gray-700 transition duration-150">
-                    <i class="fas fa-calendar-alt"></i>
-                    <span>Reminders</span>
-                </a>
-                <a href="#" class="flex items-center space-x-3 p-3 rounded-lg text-gray-300 hover:bg-gray-700 transition duration-150">
-                    <i class="fas fa-cog"></i>
-                    <span>Settings</span>
-                </a>
-                <a href="{{ url_for('logout') }}" class="flex items-center space-x-3 p-3 rounded-lg text-red-400 hover:bg-gray-700 transition duration-150 mt-4 border-t border-gray-700">
-                    <i class="fas fa-sign-out-alt"></i>
-                    <span>Logout</span>
-                </a>
-            </nav>
-        </div>
-    </div>
-    
-    <!-- Main Content Wrapper -->
-    <div id="main-content" class="main-content p-4 md:p-8 lg:ml-64">
-
-        <header class="flex justify-between items-center mb-8">
-            <div class="flex items-center space-x-4">
-                <!-- Sidebar Toggle Button (Visible on Mobile/Hidden Sidebar) -->
-                <button id="sidebar-toggle" class="lg:hidden p-2 text-gray-700 bg-white rounded-full shadow-md hover:bg-gray-100">
-                    <i class="fas fa-bars"></i>
-                </button>
-                <h1 class="text-3xl font-bold text-gray-800">Dashboard</h1>
-            </div>
-            
-            <div class="flex items-center space-x-4">
-                <span class="text-gray-600 font-medium hidden sm:inline">Welcome, {{ user.name }}</span>
-                <!-- Logout is also in the sidebar, keeping this here for quick access -->
-                <a href="{{ url_for('logout') }}" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition duration-150 hidden lg:inline-block">Logout</a>
-            </div>
-        </header>
-
-        <!-- Flash Messages -->
+    <!-- Flash Message Container -->
+    <div class="flash-message-container">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="flash-message p-3 mb-4 rounded-lg text-white font-medium 
-                        {% if category == 'success' %}bg-green-500
-                        {% elif category == 'danger' %}bg-red-500
-                        {% else %}bg-blue-500{% endif %}">
+                    <div class="alert alert-dismissible fade show mt-2 
+                        {% if category == 'success' %}alert-success
+                        {% elif category == 'danger' %}alert-danger
+                        {% else %}alert-info{% endif %}" role="alert">
                         {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
+    </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            <!-- Task List Section -->
-            <div class="lg:col-span-2">
-                <div class="card bg-white p-6 rounded-xl">
-                    <h2 class="text-2xl font-semibold mb-4 text-gray-700">Your Tasks</h2>
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Task
-                                </th>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
-                                    Reminder Time (Local)
-                                </th>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Actions
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            {% for task in tasks %}
-                            <tr class="{% if task.completed %}bg-green-50/50 text-gray-400 italic{% else %}hover:bg-gray-50{% endif %}">
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                    {% if task.completed %}
-                                        <span class="line-through">{{ task.task }}</span>
-                                    {% else %}
-                                        {{ task.task }}
-                                    {% endif %}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden sm:table-cell">
-                                    {% if task.raw_reminder_time %}
-                                        {{ task.raw_reminder_time | default('N/A', true) }}
-                                    {% else %}
-                                        N/A
-                                    {% endif %}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                                    {% if not task.completed %}
-                                    <a href="{{ url_for('complete_task', record_id=task.id) }}" class="text-green-600 hover:text-green-900 transition duration-150">
-                                        <i class="fas fa-check-circle"></i> Complete
-                                    </a>
-                                    {% endif %}
-                                    
-                                    <a href="{{ url_for('delete_task', record_id=task.id) }}" 
-                                       class="text-red-600 hover:text-red-900 transition duration-150"
-                                       data-task-id="{{ task.id }}"> 
-                                        <i class="fas fa-trash"></i> Delete 
-                                    </a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- AI Assistant & Manual Add Task Column -->
-            <div class="lg:col-span-1 space-y-8">
-                
-                <!-- AI Assistant Section -->
-                <div class="card bg-purple-50 p-6 rounded-xl">
-                    <h2 class="text-2xl font-semibold mb-4 text-purple-700 flex items-center">
-                        <i class="fas fa-robot mr-2"></i> AI Task Assistant
-                    </h2>
-                    <div class="mb-4 text-sm text-purple-600">
-                        Type a task like "Remind me to call the client at 3pm tomorrow" or ask a general question.
-                    </div>
-                    <div id="ai-response-box" class="min-h-[50px] bg-white p-3 rounded-lg border border-purple-200 mb-3 text-gray-700">
-                        Hello! How can I help you plan your day?
-                    </div>
-                    <form id="ai-assistant-form" class="flex flex-col space-y-2">
-                        <input type="text" id="ai-input" name="user_input" placeholder="e.g., set up meeting for Friday 10am" required 
-                               class="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-purple-500 focus:border-purple-500">
-                        <button type="submit" id="ai-submit-button" class="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition duration-150 font-semibold">
-                            Process
-                        </button>
-                        <div id="loading-indicator" class="text-center text-purple-500 hidden mt-2">
-                            <i class="fas fa-spinner fa-spin mr-2"></i> Thinking...
-                        </div>
-                    </form>
-                </div>
-
-                <!-- Manual Add Task Section -->
-                <div class="card bg-white p-6 rounded-xl">
-                    <h2 class="text-2xl font-semibold mb-4 text-gray-700">Manual Task Entry</h2>
-                    <form action="{{ url_for('add_task') }}" method="POST" class="space-y-4">
-                        <div>
-                            <label for="task_name" class="block text-sm font-medium text-gray-700 mb-1">Task Description</label>
-                            <input type="text" name="task_name" id="task_name" required 
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                        </div>
-                        <div>
-                            <label for="reminder_time" class="block text-sm font-medium text-gray-700 mb-1">Reminder (Optional)</label>
-                            <input type="datetime-local" name="reminder_time" id="reminder_time"
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                        </div>
-                        <button type="submit" class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-150 font-semibold">
-                            Add Task
-                        </button>
-                    </form>
-                </div>
-            </div>
-
+    <!-- NAV -->
+    <div class="nav-container">
+        <div class="nav-title">Your Task Planner</div>
+        <div class="user-info">
+            <span>{{ user.name }}</span>
+            {% if user.picture %}
+            <img src="{{ user.picture }}" alt="profile">
+            {% endif %}
+            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('logout') }}">Logout</a>
         </div>
     </div>
 
+    <!-- MAIN -->
+    <div class="container-box">
+
+        <h2>Hey {{ user.name.split(' ')[0] if user.name else 'there' }} 👋</h2>
+        <div class="text-muted mb-3">Add tasks, set reminders, mark complete. Emails fire automatically. (Mock functionality)</div>
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h4>Your Tasks</h4>
+            <button class="btn btn-primary-custom btn-sm" data-bs-toggle="modal" data-bs-target="#addTaskModal">Add Task</button>
+        </div>
+
+        <!-- TASK LIST -->
+        {% for task in tasks %}
+        <div class="task-card {% if task.completed %}completed{% endif %}">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-6">
+                    <div class="task-title">{{ task.task }}</div>
+                    <div class="task-muted">{% if task.completed %}✔ Completed{% else %}⏳ Pending{% endif %}</div>
+
+                    <!-- Update time form (Requires /update_time route in Flask) -->
+                    <form action="{{ url_for('update_time', record_id=task.id) }}" method="POST" class="d-flex align-items-center gap-2 mt-2">
+                        <input type="datetime-local" name="reminder_time" value="{{ task.raw_reminder_time }}" class="form-control form-control-sm dtl">
+                        <button class="btn btn-outline-secondary btn-sm" type="submit">Save</button>
+                    </form>
+                </div>
+
+                <div class="col-md-6 text-md-end">
+                    {% if not task.completed %}
+                    <a href="{{ url_for('complete_task', record_id=task.id) }}" class="btn btn-primary-custom btn-sm">Mark Complete</a>
+                    {% else %}
+                    <span class="badge bg-success">Done</span>
+                    {% endif %}
+                     <a href="{{ url_for('delete_task', record_id=task.id) }}" class="btn btn-danger btn-sm ms-2">
+                        <i class="fas fa-trash-alt"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        {% if tasks|length == 0 %}
+        <div class="alert alert-light border text-center mt-3">No tasks yet. Click "Add Task" or use the AI Assistant to create one.</div>
+        {% endif %}
+
+        <!-- ADD TASK MODAL -->
+        <div class="modal fade" id="addTaskModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Add Task</h5>
+                        <button class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+
+                    <!-- IMPORTANT: Changed action to 'add_task' to match previously fixed Flask route -->
+                    <form action="{{ url_for('add_task') }}" method="POST">
+                        <div class="modal-body">
+                            <label class="form-label">Task Name</label>
+                            <input type="text" name="task_name" class="form-control mb-3" required>
+
+                            <label class="form-label">Reminder Time (Optional)</label>
+                            <input type="datetime-local" name="reminder_time" class="form-control">
+                        </div>
+
+                        <div class="modal-footer">
+                            <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
+                            <button class="btn btn-primary-custom" type="submit">Add Task</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI SECTION -->
+        <div class="card p-3 mt-4">
+            <h5>AI Assistant <i class="fas fa-robot"></i></h5>
+            <p class="text-muted">Ask anything. AI will help extract tasks or chat.</p>
+
+            <div class="input-group mb-2">
+                <input id="ai_input" class="form-control" placeholder="e.g., Remind me to study physics tomorrow at 4 PM">
+                <button id="ai_button" class="btn btn-primary-custom" onclick="sendToAI()">Ask</button>
+            </div>
+
+            <pre id="ai_output" class="p-2 bg-light border" style="min-height:100px; white-space: pre-wrap; color: var(--text);">Hello! Ask me to schedule a task or any general question.</pre>
+        </div>
+
+    </div>
+
+    <!-- SCRIPT SECTION -->
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // --- Sidebar Toggle Logic ---
-            const sidebar = document.getElementById('sidebar');
-            const toggleButton = document.getElementById('sidebar-toggle');
-            const body = document.body;
+        const aiProcessUrl = "{{ url_for('ai_process') }}"; // Flask route for AI processing
 
-            // Default state for large screens (sidebar open)
-            if (window.innerWidth >= 1024) {
-                body.classList.add('sidebar-open');
-                body.classList.remove('sidebar-closed');
-            } else {
-                body.classList.remove('sidebar-open');
-                body.classList.add('sidebar-closed');
+        async function sendToAI() {
+            const inputElement = document.getElementById("ai_input");
+            const outputElement = document.getElementById("ai_output");
+            const askButton = document.getElementById("ai_button");
+            const text = inputElement.value.trim();
+
+            if (!text) {
+                outputElement.innerText = "Please enter a question or a task reminder.";
+                return;
             }
+            
+            // Disable input and button while processing
+            askButton.disabled = true;
+            inputElement.disabled = true;
+            outputElement.innerText = "Processing request... Please wait.";
 
-            toggleButton.addEventListener('click', function() {
-                const isHidden = sidebar.classList.toggle('-translate-x-full');
-                
-                if (window.innerWidth < 1024) {
-                    // Mobile: The sidebar is toggled between visible and hidden
-                    if (isHidden) {
-                        body.classList.remove('sidebar-open');
-                        body.classList.add('sidebar-closed');
-                    } else {
-                        body.classList.add('sidebar-open');
-                        body.classList.remove('sidebar-closed');
-                    }
-                } else {
-                    // Desktop: Toggle the main content shift class
-                    body.classList.toggle('sidebar-open');
-                    body.classList.toggle('sidebar-closed');
+            try {
+                const res = await fetch(aiProcessUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ user_input: text })
+                });
+
+                // Check for HTTP errors first
+                if (!res.ok) {
+                    throw new Error(`HTTP error! status: ${res.status}`);
                 }
-            });
 
+                const data = await res.json();
 
-            // --- AI Assistant Logic ---
-            const form = document.getElementById('ai-assistant-form');
-            const input = document.getElementById('ai-input');
-            const responseBox = document.getElementById('ai-response-box');
-            const loadingIndicator = document.getElementById('loading-indicator');
-            const submitButton = document.getElementById('ai-submit-button');
-
-            const aiProcessUrl = "{{ url_for('ai_process') }}";
-
-            form.addEventListener('submit', async function(e) {
-                e.preventDefault();
-
-                const userInput = input.value.trim();
-                if (!userInput) return;
-
-                // 1. Show Loading and Disable Input
-                responseBox.textContent = "Processing your request...";
-                loadingIndicator.classList.remove('hidden');
-                submitButton.disabled = true;
-                input.disabled = true;
-
-                try {
-                    const response = await fetch(aiProcessUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ user_input: userInput })
-                    });
-
-                    const result = await response.json();
-                    
-                    // 2. Handle Response
-                    if (result.type === 'success') {
-                        if (result.action === 'add') {
-                            const date = result.reminder_time ? new Date(result.reminder_time).toLocaleString() : 'N/A';
-                            responseBox.innerHTML = `✅ <strong>Task Added!</strong> The task "${result.task}" has been successfully scheduled for ${date}.`;
-                            // Refresh the page to show the new task in the list
-                            setTimeout(() => { window.location.reload(); }, 1000); 
-                        } else if (result.action === 'chat') {
-                            responseBox.textContent = result.response;
-                        }
-                    } else {
-                        responseBox.textContent = `Error: ${result.message || 'Could not process AI request.'}`;
-                    }
-
-                } catch (error) {
-                    responseBox.textContent = 'An unexpected network error occurred.';
-                    console.error('Fetch error:', error);
-                } finally {
-                    // 3. Reset UI
-                    loadingIndicator.classList.add('hidden');
-                    submitButton.disabled = false;
-                    input.disabled = false;
-                    input.value = ''; // Clear the input field
+                // If AI returns an error → show it
+                if (data.type === "error") {
+                    outputElement.innerText = "❌ Error:\n" + (data.message || "An unknown error occurred.");
+                    console.error("AI Error:", data);
+                    return;
                 }
-            });
-        });
+
+                // If AI returns a general conversation → show it
+                if (data.action !== "add") {
+                    outputElement.innerText = data.response || "I am sorry, I could not generate a chat response.";
+                    return;
+                }
+
+                // If AI successfully added a task
+                const dateString = data.reminder_time 
+                    ? new Date(data.reminder_time).toLocaleString() 
+                    : "N/A (No specific time set)";
+
+                outputElement.innerHTML = `✅ **Task Added!**<br>Task: ${data.task}<br>Time: ${dateString}`;
+
+                // Refresh automatically to show the new task
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+
+            } catch (error) {
+                outputElement.innerText = `❌ Network Error or Invalid Response: ${error.message}`;
+                console.error('Fetch error:', error);
+            } finally {
+                // Re-enable input and button
+                askButton.disabled = false;
+                inputElement.disabled = false;
+                inputElement.value = ''; // Clear input
+            }
+        }
     </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
 </body>
 </html>
