@@ -105,7 +105,7 @@ def check_task_ownership(record_id, user_email):
 # Conditional import for Google Generative AI SDK components
 try:
     import google.generativeai as genai
-    # Fix 1: Ensure Schema and Type are imported correctly from the top-level or types module
+    # Ensure Schema and Type are imported correctly from the top-level or types module
     try:
         from google.generativeai import Schema, Type
     except ImportError:
@@ -166,7 +166,10 @@ except AttributeError:
 
 # Configure Gemini key if it exists
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# --- DEBUGGING LOG ADDED HERE ---
 if GEMINI_API_KEY and HAS_GEMINI_SDK:
+    app.logger.info("✅ GEMINI_API_KEY retrieved successfully from environment.")
     try:
         # CORRECT: Using the environment variable GEMINI_API_KEY
         genai.configure(api_key=GEMINI_API_KEY) 
@@ -174,6 +177,8 @@ if GEMINI_API_KEY and HAS_GEMINI_SDK:
         app.logger.error(f"Gemini configuration failed: {e}")
         GEMINI_API_KEY = None
 else:
+    # This block is executed if GEMINI_API_KEY is not set in the environment.
+    app.logger.warning("❌ GEMINI_API_KEY not found in environment variables. AI features disabled.")
     GEMINI_API_KEY = None
 
 
@@ -183,6 +188,7 @@ def ask_ai_structured(user_text: str, api_key: Optional[str], has_sdk: bool, log
     Implements retries using exponential backoff.
     """
     if not api_key:
+        # This is the source of the error message you are seeing
         return {"type": "error", "message": "Gemini API Key is not configured."}
     if not has_sdk or not genai:
         return {"type": "error", "message": "Google Generative AI SDK is not available or configuration failed."}
