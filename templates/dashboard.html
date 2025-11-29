@@ -69,81 +69,6 @@
     .dtl { max-width: 210px; }
 
     .card { border: 1px solid var(--border); border-radius: 8px; background: #fff; }
-
-
-        /* ------------------------------------------------------
-   MODERN AI ASSISTANT UI (Notion / Linear Style)
--------------------------------------------------------*/
-
-.ai-card {
-  background: #ffffff;
-  border: 1px solid #e5e5e5;
-  border-radius: 16px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.05);
-  transition: 0.25s ease;
-}
-
-.ai-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.07);
-}
-
-.ai-chat-box {
-  background: #f7f7f8;
-  border: 1px solid #e3e3e3;
-  border-radius: 12px;
-  min-height: 160px;
-  max-height: 260px;
-  overflow-y: auto;
-  padding: 14px;
-  font-size: 14px;
-  color: #333;
-  white-space: pre-wrap;
-}
-
-.ai-input-wrapper {
-  display: flex;
-  gap: 10px;
-}
-
-.ai-input {
-  flex: 1;
-  padding: 12px 16px;
-  background: #ffffff;
-  border: 1px solid #dcdcdc;
-  border-radius: 12px;
-  font-size: 15px;
-  transition: all .2s ease;
-}
-
-.ai-input:focus {
-  outline: none;
-  border-color: #0d6efd;
-  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
-}
-
-.ai-send-btn {
-  background: #0d6efd;
-  border: none;
-  color: white;
-  border-radius: 12px;
-  padding: 0 18px;
-  font-size: 15px;
-  transition: .2s;
-}
-
-.ai-send-btn:hover {
-  background: #004ecb;
-  transform: translateY(-2px);
-}
-
-.ai-send-btn:active {
-  transform: scale(.96);
-}
-
-
-
-
   </style>
 </head>
 <body>
@@ -227,200 +152,62 @@
       </div>
     </div>
 
-    <!-- AI ASSISTANT (Modern UI) -->
-<div class="ai-card mt-4 p-4">
-  <h5 class="fw-bold mb-2">AI Assistant 🤖</h5>
-  <p class="text-muted mb-3">Ask anything. AI will add tasks or answer questions.</p>
+    <!-- AI SECTION -->
+    <div class="card p-3 mt-4">
+      <h5>AI Assistant 🤖</h5>
+      <p class="text-muted">Ask anything. AI will help extract tasks or chat.</p>
 
-  <!-- Chat Output Area -->
-  <div id="ai_chat" class="ai-chat-box mb-3"></div>
+      <div class="input-group mb-2">
+        <input id="ai_input" class="form-control" placeholder="e.g., Remind me to study physics tomorrow at 4 PM">
+        <button class="btn btn-primary-custom" onclick="sendToAI()">Ask</button>
+      </div>
 
-  <!-- Input -->
-  <div class="ai-input-wrapper">
-    <input id="ai_input" class="ai-input" placeholder="Type a message... (e.g., Remind me to study at 4 PM)">
-    <button class="ai-send-btn" onclick="sendToAI()">Send</button>
-  </div>
-</div>
+      <pre id="ai_output" class="p-2 bg-light" style="min-height:100px; white-space: pre-wrap;"></pre>
+    </div>
+
+</div> 
 
     
-<script>
-/* ---------- Utilities ---------- */
-function escapeHtml(unsafe) {
-  if (unsafe === null || unsafe === undefined) return "";
-  return String(unsafe)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-function scrollChat(chat) {
-  try { chat.scrollTo({ top: chat.scrollHeight, behavior: "smooth" }); } catch { chat.scrollTop = chat.scrollHeight; }
-}
-function appendUser(chat, text) {
-  const el = document.createElement("div"); el.className = "user"; el.innerHTML = escapeHtml(text); chat.appendChild(el); scrollChat(chat);
-}
-function appendBot(chat, htmlContent) {
-  const el = document.createElement("div"); el.className = "bot"; el.innerHTML = htmlContent; chat.appendChild(el); scrollChat(chat);
-}
-
-/* ---------- Inject task card into DOM (visual, no network) ---------- */
-function injectTaskToDOM(taskName, reminderTime) {
-  const container = document.querySelector('.container-box');
-  if (!container) return;
-  const card = document.createElement('div');
-  card.className = 'task-card';
-  card.innerHTML = `
-    <div class="row g-2 align-items-center">
-      <div class="col-md-6">
-        <div class="task-title">${escapeHtml(taskName)}</div>
-        <div class="task-muted">⏳ Pending</div>
-        <form class="d-flex align-items-center gap-2 mt-2">
-          <input type="datetime-local" class="form-control form-control-sm dtl" value="${escapeHtml(reminderTime || '')}">
-          <button class="btn btn-outline-secondary btn-sm" type="button">Save</button>
-        </form>
-      </div>
-      <div class="col-md-6 text-md-end">
-        <a class="btn btn-primary-custom btn-sm" href="#">Mark Complete</a>
-      </div>
-    </div>
-  `;
-  const firstTask = container.querySelector('.task-card');
-  if (firstTask) container.insertBefore(card, firstTask);
-  else {
-    const aiCard = container.querySelector('.ai-card');
-    if (aiCard) container.insertBefore(card, aiCard);
-    else container.appendChild(card);
-  }
-  card.style.opacity = 0;
-  card.style.transform = 'translateY(8px)';
-  setTimeout(() => { card.style.transition = 'all .25s'; card.style.opacity = 1; card.style.transform = 'translateY(0)'; }, 10);
-}
-
-/* ---------- Main sendToAI (handles network + UI) ---------- */
-let isSending = false;
+  <script>
 async function sendToAI() {
-  const inputEl = document.getElementById("ai_input");
-  const chat = document.getElementById("ai_chat");
-  const sendBtn = document.querySelector(".ai-send-btn");
-  const text = (inputEl.value || "").trim();
-  if (!text || isSending) return;
-
-  isSending = true;
-  if (sendBtn) sendBtn.disabled = true;
-  inputEl.disabled = true;
-
-  appendUser(chat, text);
-  inputEl.value = "";
-
-  // Typing indicator
-  const typingId = "ai-typing-indicator";
-  const typingEl = document.createElement("div");
-  typingEl.id = typingId;
-  typingEl.className = "bot";
-  typingEl.innerHTML = `<i>AI is typing…</i>`;
-  chat.appendChild(typingEl);
-  scrollChat(chat);
-
-  // request with timeout
-  let controller = null;
-  try {
-    controller = new AbortController();
-    const timeoutMs = 20000; // 20s
-    const t = setTimeout(() => controller.abort(), timeoutMs);
+    const text = document.getElementById("ai_input").value;
 
     const res = await fetch("/ai-process", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_input: text }),
-      signal: controller.signal
+      body: JSON.stringify({ user_input: text })
     });
 
-    clearTimeout(t);
-    const tEl = document.getElementById(typingId); if (tEl) tEl.remove();
+    const data = await res.json();
 
-    let data;
-    try {
-      data = await res.json();
-    } catch (e) {
-      const raw = await res.text();
-      appendBot(chat, `<pre style="margin:0">${escapeHtml(raw)}</pre>`);
-      throw new Error("Non-JSON response");
-    }
-
-    // Backend error
+    // If AI returns an error → show it
     if (data.type === "error") {
-      const msg = escapeHtml(data.message || "AI error");
-      const details = data.raw ? `<details style="margin-top:6px"><summary>Raw</summary><pre style="margin:0">${escapeHtml(data.raw)}</pre></details>` : "";
-      appendBot(chat, `<strong>Error:</strong> ${msg}${details}`);
-      return;
+        document.getElementById("ai_output").innerText =
+            "❌ Error:\n" + JSON.stringify(data, null, 2);
+        return;
     }
 
-    // If action add and backend saved it, inject and reload
-    const action = data.action || data.type || "";
-    if (action === "add" || (data.type === "success" && data.action === "add")) {
-      const taskName = data.task || "";
-      const time = data.reminder_time || data.date || "";
-      // inject visually now
-      injectTaskToDOM(taskName, time);
-      appendBot(chat, escapeHtml(data.message || `✅ Task added: "${taskName}" ${time ? "at " + time : ""}`));
-      // If backend succeeded, reload shortly to sync real list
-      if (data.type === "success" || data.message) {
-        setTimeout(() => window.location.reload(), 800);
-      }
-      return;
+    // If AI returns a general conversation → show it
+    if (data.action !== "add") {
+        document.getElementById("ai_output").innerText =
+            JSON.stringify(data, null, 2);
+        return;
     }
 
-    // Not an add action — friendly message if provided, else structured summary
-    const friendly = data.message || data.assistant_text || "";
-    if (friendly) { appendBot(chat, escapeHtml(friendly)); return; }
+    // If AI successfully added a task
+    document.getElementById("ai_output").innerText =
+        "✅ Task added:\n" +
+        "Task: " + data.task + "\n" +
+        "Time: " + data.reminder_time;
 
-    if (data.action || data.task || data.date || data.extra) {
-      const summary = [
-        data.action ? `<strong>Action:</strong> ${escapeHtml(data.action)}` : "",
-        data.task ? `<strong>Task:</strong> ${escapeHtml(data.task)}` : "",
-        data.date ? `<strong>Date:</strong> ${escapeHtml(data.date)}` : "",
-        data.extra ? `<strong>Extra:</strong> ${escapeHtml(data.extra)}` : ""
-      ].filter(Boolean).join("<br>");
-      appendBot(chat, summary || `<pre style="margin:0">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`);
-      return;
-    }
-
-    appendBot(chat, `<pre style="margin:0">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`);
-  } catch (err) {
-    // remove typing if present
-    const tEl = document.getElementById("ai-typing-indicator"); if (tEl) tEl.remove();
-    const msg = err.name === "AbortError" ? "Request timed out." : (err.message || "Network error");
-    appendBot(chat, `<strong>Network:</strong> ${escapeHtml(msg)} — showing simulated reply.`);
-    appendBot(chat, `✅ (Simulated) I would add a task for: "${escapeHtml(text)}"`);
-    // simulated -> no reload
-  } finally {
-    isSending = false;
-    if (sendBtn) sendBtn.disabled = false;
-    inputEl.disabled = false;
-    inputEl.focus();
-  }
+    // Refresh automatically to show the new task
+    setTimeout(() => {
+        window.location.reload();
+    }, 800);
 }
-
-/* ---------- Enter to send and button hook ---------- */
-document.getElementById("ai_input").addEventListener("keydown", function(e) {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendToAI(); }
-});
-const sendBtn = document.querySelector(".ai-send-btn");
-if (sendBtn) sendBtn.addEventListener("click", sendToAI);
 </script>
-
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 </body>
 </html>
-
-
-
-
-
-
-
-
-
