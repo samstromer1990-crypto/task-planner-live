@@ -1,8 +1,10 @@
 Flask
 requests
 authlib
+gunicorn
 google-generativeai
 apscheduler
 dateparser
 google-cloud-firestore
 python-dateutil
+
