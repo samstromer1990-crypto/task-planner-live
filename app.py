@@ -17,6 +17,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from collections import Counter
 
 # --- IMPORTING THE IMPROVED AI LOGIC ---
+# NOTE: This requires the file gemini_improvement.py to exist in the same directory.
 from gemini_improvement import ask_ai_gemini 
 # ---------------------- Load config ----------------------
 load_dotenv()
@@ -112,14 +113,9 @@ except Exception:
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY and HAS_GEMINI_SDK:
     try:
-        # We only configure here. The call logic is now in gemini_improvement.py
         genai.configure(api_key=GEMINI_API_KEY) 
     except Exception:
         GEMINI_API_KEY = None
-
-
-# The old SYSTEM_PROMPT is no longer needed, we use the one in gemini_improvement.py
-# SYSTEM_PROMPT = """..."""
 
 
 def ask_ai(user_text):
@@ -172,11 +168,10 @@ def ai_process():
     task_name = result.get("task")
     date_text = result.get("date")
     
-    # --- CONVERSATIONAL RESPONSE LOGIC ADDED HERE ---
+    # --- CONVERSATIONAL RESPONSE LOGIC ---
     # If action is NOT "add" → return AI result to front-end (for general conversational responses)
     if action != "add":
-        # We need to make sure the front-end has text to display. 
-        # The 'task' field is now repurposed for the AI's conversational response.
+        # The 'task' field holds the conversational response when action is 'general'
         conversational_response = result.get("task") or "I'm here to help you manage your tasks!"
         return jsonify({
             "type": "success",
