@@ -1,605 +1,173 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Task Planner Dashboard</title>
+  <meta charset="UTF-8">
+  <title>Your Task Planner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
-<style>
-/* --- DESIGN SYSTEM BASED ON DESIRED IMAGE --- */
-:root{
-  --bg: #f4f1fb; /* Light purple-gray background */
-  --panel: #fff; /* White cards */
-  --metric-card: #fff;
-  --muted: #7b7f88;
-  --primary: #7c5cff; /* Main purple/accent */
-  --accent: #bfa8ff;
-  --radius: 14px;
-  --shadow: 0 12px 30px rgba(22,18,32,0.06);
-  --task-shadow: 0 2px 8px rgba(0,0,0,0.02);
-}
-
-/* Base */
-*{box-sizing:border-box}
-body{
-  margin:0;
-  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-  background:var(--bg);
-  color:#111827;
-}
-
-/* Dark Mode (Basic structure for future implementation) */
-body.dark-mode {
-    --bg: #1e1e2d;
-    --panel: #27293d;
-    --metric-card: #27293d;
-    --muted: #a0a0b0;
-    --text: #f0f0f5;
-    color: var(--text);
-}
-body.dark-mode .task-row { border-color: #3b3d50; }
-body.dark-mode .chart-placeholder { background: #33354a; }
-body.dark-mode .calendar-widget { background: var(--panel); }
-body.dark-mode .progress-bar-custom { background-color: #3b3d50; }
-
-
-/* App Layout & Grid */
-.app-container { 
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
-}
-.header-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-}
-.main-grid {
-  display: grid;
-  grid-template-columns: 1fr 300px; /* Content (Task List) | Sidebar (Calendar) */
-  gap: 24px;
-}
-@media (max-width: 992px) {
-  .main-grid { 
-        grid-template-columns: 1fr;
-        /* Sidebar comes first on mobile for contextual info */
-        grid-template-areas: "sidebar" "main-content";
+  <style>
+    body {
+      margin: 0;
+      font-family: Inter, sans-serif;
+      background: var(--bs-body-bg);
+      color: var(--bs-body-color);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
     }
-    .sidebar-content { grid-area: sidebar; }
-    .main-content-area { grid-area: main-content; }
-}
 
-/* General Card Styles */
-.card-panel {
-  background:var(--panel);
-  border-radius:var(--radius);
-  padding:20px;
-  box-shadow: var(--shadow);
-  margin-bottom: 24px;
-}
+    /* Sidebar */
+    #sidebar {
+      width: 260px;
+      background: var(--bs-secondary-bg);
+      padding: 20px;
+      border-right: 1px solid var(--bs-border-color);
+      transition: background 0.3s;
+    }
 
-/* --- HERO/METRICS (Check your daily tasks & schedules) --- */
-.hero-container {
-  background: var(--metric-card);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 24px;
-  margin-bottom: 24px;
-  display: flex;
-  gap: 24px;
-}
-.hero-main { flex: 1; }
-.hero-title { font-size: 20px; font-weight: 700; color: inherit; margin: 0 0 4px; }
-.hero-subtitle { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
+    #sidebar h2 {
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
 
-.metrics-row {
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  flex-wrap: wrap;
-}
-.metric {
-  flex: 1;
-  min-width: 100px;
-  max-width: 140px;
-  padding: 10px 0;
-}
-.metric h4 { margin: 0; font-weight: 700; }
-.metric small { color: var(--muted); font-size: 12px; }
+    /* Toggle Button */
+    #themeToggleBtn {
+      position: absolute;
+      top: 15px;
+      right: 20px;
+      background: transparent;
+      border: none;
+      font-size: 22px;
+      cursor: pointer;
+    }
 
-/* Progress Bar */
-.metric-progress {
-  flex: 1;
-  min-width: 180px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-.progress-bar-custom {
-  height: 10px;
-  background-color: #e9e6f3;
-  border-radius: 5px;
-  overflow: hidden;
-}
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--primary), var(--accent));
-  transition: width 0.5s ease-in-out;
-}
+    /* Main area */
+    #main {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
 
-/* Task Breakdown Chart Placeholder (Right side of Hero) */
-.chart-placeholder {
-  width: 140px;
-  background: #fdfdfd;
-  border-radius: 10px;
-  padding: 10px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-  text-align: center;
-}
-.chart-title { font-size: 12px; font-weight: 600; margin-bottom: 6px; color: inherit; }
-.chart-area { 
-  height: 50px; 
-  background: #f0f0f0; 
-  border-radius: 6px;
-  /* Simple bar representation */
-  display: flex;
-  align-items: flex-end;
-  padding: 4px;
-  gap: 2px;
-}
-.bar { width: 10px; background: var(--primary); border-radius: 2px 2px 0 0; }
+    .task-card {
+      background: var(--bs-tertiary-bg);
+      border-radius: 12px;
+      padding: 15px;
+      margin-bottom: 12px;
+      border: 1px solid var(--bs-border-color);
+      transition: background 0.3s;
+    }
 
-/* --- TASK LIST STYLES --- */
-.task-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: var(--panel);
-  border-radius: 8px;
-  padding: 14px 16px;
-  margin-bottom: 10px;
-  border: 1px solid #eee;
-  box-shadow: var(--task-shadow);
-}
-.task-row:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
-
-.task-details {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  flex-grow: 1;
-}
-.task-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.initials-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: #e9e6f3;
-  color: var(--primary);
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  flex-shrink: 0;
-}
-.task-title-main { font-weight: 600; font-size: 15px; margin: 0; }
-.task-meta { font-size: 12px; color: var(--muted); }
-.task-meta .priority-low { color: green; font-weight: 600; }
-.task-meta .priority-med { color: orange; font-weight: 600; }
-.task-meta .priority-high { color: red; font-weight: 600; }
-
-/* Completed Task State */
-.task-row.completed .task-title-main { text-decoration: line-through; opacity: 0.7; }
-.task-row.completed .initials-avatar { background: #d4e8c1; color: #507b27; }
-
-/* --- SIDEBAR CALENDAR STYLES --- */
-.sidebar-content {
-  position: sticky;
-  top: 20px; /* Offset from the top */
-}
-.calendar-widget {
-  padding: 16px;
-  background: var(--panel);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  margin-bottom: 24px;
-}
-.calendar-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-.calendar-month { font-weight: 700; font-size: 16px; }
-.calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  text-align: center;
-  font-size: 12px;
-}
-.calendar-day-header {
-  color: var(--muted);
-  padding-bottom: 6px;
-  font-weight: 600;
-}
-.calendar-day {
-  padding: 6px 0;
-  border-radius: 6px;
-  font-weight: 600;
-}
-.calendar-day.today {
-  background-color: var(--primary);
-  color: #fff;
-  box-shadow: 0 2px 6px rgba(124,92,255,0.4);
-}
-.calendar-day.event { border: 1px solid var(--accent); }
-
-/* --- BUTTONS & UTILITIES --- */
-.btn-primary-custom {
-  background: var(--primary);
-  border: 1px solid var(--primary);
-  color: #fff;
-}
-.btn-primary-custom:hover { background: #6a49e6; border-color: #6a49e6; }
-.btn-sm-custom { padding: 4px 10px; font-size: 13px; border-radius: 6px; }
-
-/* Adjustments for Bootstrap date input */
-.datetime-input { max-width: 170px; font-size: 13px; }
-
-/* Custom styling for flash messages */
-.flash-message-container {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 1050; /* Above modals */
-    width: 300px;
-}
-</style>
+    .calendar-box {
+      background: var(--bs-tertiary-bg);
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid var(--bs-border-color);
+      margin-bottom: 20px;
+      transition: background 0.3s;
+    }
+  </style>
 </head>
+
 <body>
 
-<div class="app-container">
-  <div class="header-bar">
-    <h2 style="margin:0; font-weight:700">Welcome back <span id="userNameDisplay">{% if user.name %}{{ user.name.split(' ')[0] }}{% else %}there{% endif %} 👋</span></h2>
-    <div class="d-flex gap-2">
-      <button id="themeToggle" class="btn btn-outline-secondary btn-sm-custom">Dark</button>
-      <a class="btn btn-outline-secondary btn-sm-custom" href="{{ url_for('logout') }}">Logout</a>
-      <button class="btn btn-primary-custom btn-sm-custom" data-bs-toggle="modal" data-bs-target="#addTaskModal">+ Add Task</button>
-    </div>
-  </div>
+  <!-- THEME TOGGLE BUTTON (top-right) -->
+  <button id="themeToggleBtn">🌙</button>
 
-    <!-- Flash Message Container -->
-    <div class="flash-message-container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show mt-2" role="alert" style="border-radius:10px;">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <h2>Your Planner</h2>
+    <button class="btn btn-primary w-100 mb-3" id="addTaskBtn">Add Task</button>
+
+    <h5 class="mt-4">Tasks</h5>
+    <div id="taskList"></div>
+  </div>
+
+  <!-- Main Content -->
+  <div id="main">
+
+    <div class="calendar-box">
+      <h3>Calendar</h3>
+      <input type="date" class="form-control mt-2">
     </div>
 
-    <div class="main-grid">
+    <h3 class="mb-3">Today's Tasks</h3>
+    <div id="todayTasks"></div>
 
-        <div class="main-content-area">
-            <section class="hero-container">
-        <div class="hero-main">
-          <p style="color:var(--muted); font-size:14px; margin-bottom: 2px;">Today's Task</p>
-          <h3 class="hero-title">Check your daily tasks & schedules</h3>
-          <p class="hero-subtitle">Quick glance at progress and what's due today.</p>
+  </div>
 
-          <div class="metrics-row">
-            <div class="metric">
-              <small>Total Tasks</small>
-              <h4 id="totalShow">{{ tasks|length }}</h4>
-            </div>
-            <div class="metric">
-              <small>Completed</small>
-              <h4 id="doneShow" class="text-success">{{ tasks | selectattr('completed', 'equalto', true) | list | length }}</h4>
-            </div>
-            <div class="metric">
-              <small>Pending</small>
-              <h4 id="pendingShow" class="text-danger">{{ tasks | selectattr('completed', 'equalto', false) | list | length }}</h4>
-            </div>
-            <div class="metric-progress">
-              <small>Progress</small>
-              {% set total = tasks|length %}
-              {% set done = tasks | selectattr('completed', 'equalto', true) | list | length %}
-              {% set pct = (done / total * 100) | round(0) if total > 0 else 0 %}
-              <div class="progress-bar-custom mt-1">
-                <div class="progress-fill" style="width:{{ pct }}%"></div>
-              </div>
-              <small style="margin-top: 4px; font-weight:600;">{{ pct }}% Overall completion</small>
-            </div>
-          </div>
-        </div>
-        
-                <div class="chart-placeholder d-none d-md-block">
-          <div class="chart-title">This Week</div>
-          <div style="font-size:10px; color:var(--muted)">Task Breakdown</div>
-          <div class="chart-area mt-1">
-                        <div class="bar" style="height: 40%"></div>
-            <div class="bar" style="height: 60%"></div>
-            <div class="bar" style="height: 30%"></div>
-            <div class="bar" style="height: 80%"></div>
-            <div class="bar" style="height: 50%"></div>
-            <div class="bar" style="height: 20%"></div>
-            <div class="bar" style="height: 10%"></div>
-          </div>
-          <div style="font-size:10px; color:var(--muted); margin-top:4px;">Mon Tue Wed Thu Fri Sat Sun</div>
-        </div>
-      </section>
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
-            <div>
-        <h4 style="margin-bottom: 12px;">Your Tasks</h4>
+  <!-- DARK MODE TOGGLE LOGIC -->
+  <script>
+    const html = document.documentElement;
+    const toggleBtn = document.getElementById("themeToggleBtn");
 
-        {% for task in tasks %}
-        <div class="task-row {% if task.completed %}completed{% endif %}">
-          <div class="task-details">
-                        <div class="initials-avatar">{{ task.task[:2] | upper }}</div>
-            
-            <div>
-              <p class="task-title-main">{{ task.task }}</p>
-              <div class="task-meta">
-                Due: 
-                {% if task.raw_reminder_time %}
-                  {{ task.raw_reminder_time | replace('Z', '') | truncate(10, True, '') }}
-                {% else %}
-                  No Date
-                {% endif %}
-                • <span class="priority-med">MED</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="task-actions">
-            {% if not task.completed %}
-            <a href="{{ url_for('complete_task', record_id=task.id) }}" class="btn btn-primary-custom btn-sm-custom">Done</a>
-            {% else %}
-            <a href="{{ url_for('complete_task', record_id=task.id) }}" class="btn btn-outline-secondary btn-sm-custom">Undo</a>
-            {% endif %}
-
-            <a href="{{ url_for('delete_task', record_id=task.id) }}"
-             class="btn btn-outline-danger btn-sm-custom"
-             onclick="return confirm('Delete task: {{ task.task | e }}?');">
-              Delete
-            </a>
-          </div>
-        </div>
-
-                <form action="{{ url_for('update_time', record_id=task.id) }}" method="POST" class="d-flex align-items-center gap-2 mb-3 ms-5">
-          <input type="datetime-local" name="reminder_time"
-                 value="{{ task.raw_reminder_time | replace('Z', '') | truncate(16, True, '') }}"
-                 class="form-control datetime-input">
-          <button class="btn btn-outline-secondary btn-sm-custom">Save Time</button>
-        </form>
-        {% endfor %}
-
-        {% if tasks|length == 0 %}
-        <div class="alert alert-light border text-center mt-3" style="border-radius:10px;">No tasks yet. Click "+ Add Task" to create one.</div>
-        {% endif %}
-        
-                <div class="card-panel mt-4">
-          <h5>AI Assistant 🤖</h5>
-          <p class="text-muted small">Ask anything. AI will help extract tasks or chat.</p>
-
-          <div class="input-group mb-2">
-            <input id="ai_input" class="form-control" placeholder="e.g., Remind me to study physics tomorrow at 4 PM">
-            <button class="btn btn-primary-custom" onclick="sendToAI()">Ask</button>
-          </div>
-
-          <pre id="ai_output" class="p-3" style="min-height:100px; white-space: pre-wrap; background:var(--bg); border-radius:10px; border:1px solid #e9e6f3;">Hello! Ask me to schedule a task or any general question.</pre>
-        </div>
-      </div>
-    </div>
-
-
-        <div class="sidebar-content">
-            <div class="calendar-widget">
-        <div class="calendar-header">
-          <span class="calendar-month">November 2025</span>
-          <small style="color:var(--primary); font-weight:600;">Add</small>
-        </div>
-
-        <div class="calendar-grid">
-          <div class="calendar-day-header">Mo</div>
-          <div class="calendar-day-header">Tu</div>
-          <div class="calendar-day-header">We</div>
-          <div class="calendar-day-header">Th</div>
-          <div class="calendar-day-header">Fr</div>
-          <div class="calendar-day-header">Sa</div>
-          <div class="calendar-day-header" style="color: #dc3545;">Su</div>
-                    <div class="calendar-day" style="grid-column: 6;">1</div>
-          <div class="calendar-day" style="color: #dc3545;">2</div>
-          <div class="calendar-day event">3</div>
-          <div class="calendar-day">4</div>
-          <div class="calendar-day">5</div>
-          <div class="calendar-day">6</div>
-          <div class="calendar-day event">7</div>
-          <div class="calendar-day">8</div>
-          <div class="calendar-day" style="color: #dc3545;">9</div>
-          <div class="calendar-day event">10</div>
-          <div class="calendar-day">11</div>
-          <div class="calendar-day">12</div>
-          <div class="calendar-day">13</div>
-          <div class="calendar-day">14</div>
-          <div class="calendar-day">15</div>
-          <div class="calendar-day" style="color: #dc3545;">16</div>
-          <div class="calendar-day">17</div>
-          <div class="calendar-day">18</div>
-          <div class="calendar-day">19</div>
-          <div class="calendar-day">20</div>
-          <div class="calendar-day">21</div>
-          <div class="calendar-day">22</div>
-          <div class="calendar-day" style="color: #dc3545;">23</div>
-          <div class="calendar-day">24</div>
-          <div class="calendar-day">25</div>
-          <div class="calendar-day">26</div>
-          <div class="calendar-day">27</div>
-          <div class="calendar-day today">28</div>
-          <div class="calendar-day">29</div>
-          <div class="calendar-day" style="color: #dc3545;">30</div>
-        </div>
-      </div>
-
-          </div>
-
-  </div> </div>
-
-<div class="modal fade" id="addTaskModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content" style="border-radius:12px">
-      <div class="modal-header">
-        <h5 class="modal-title">Add Task</h5>
-        <button class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-
-      <form action="{{ url_for('add_task') }}" method="POST">
-        <div class="modal-body">
-          <label class="form-label small">Task Name</label>
-          <input type="text" name="task_name" class="form-control mb-3" required>
-
-          <label class="form-label small">Reminder Time</label>
-          <input type="datetime-local" name="reminder_time" class="form-control">
-        </div>
-
-        <div class="modal-footer">
-          <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-primary-custom">Add Task</button>
-        </div>
-      </form>
-    </div>
-    </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
-<script>
-    // Define the Flask route URL for AI processing using Jinja
-    const aiProcessUrl = "{{ url_for('ai_process') }}";
-
-// --- USERNAME LOGIC (Ensures the greeting works correctly) ---
-function checkAndSetUsername() {
-    let userName = localStorage.getItem('taskPlannerUserName');
-    
-    // If no name is found, prompt the user (optional, can be disabled after first run)
-    if (!userName && (typeof user === 'undefined' || !user.name)) {
-        let input = prompt("Welcome! Please enter your name:");
-        if (input && input.trim() !== '') {
-            userName = input.trim();
-            localStorage.setItem('taskPlannerUserName', userName);
-        } else {
-            userName = 'there'; // Default name
-        }
-    } else if (typeof user !== 'undefined' && user.name) {
-        userName = user.name; // Use authenticated name if available
-    } else {
-        userName = userName || 'there'; // Fallback
+    // Load saved theme
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme) {
+      html.setAttribute("data-bs-theme", savedTheme);
+      toggleBtn.textContent = savedTheme === "dark" ? "☀️" : "🌙";
     }
 
-    // Display only the first name for a friendly greeting
-    const firstName = userName.split(' ')[0];
-    const displayElement = document.getElementById('userNameDisplay');
-    if (displayElement) {
-        displayElement.textContent = firstName + " 👋";
-    }
-}
+    // Toggle theme
+    toggleBtn.addEventListener("click", () => {
+      const current = html.getAttribute("data-bs-theme");
+      const next = current === "dark" ? "light" : "dark";
 
-// --- THEME TOGGLE AND ONLOAD ---
-document.addEventListener('DOMContentLoaded', ()=> {
-  checkAndSetUsername(); // CALL THE NEW FUNCTION ON LOAD
+      html.setAttribute("data-bs-theme", next);
+      localStorage.setItem("theme", next);
 
-  const themeToggle = document.getElementById('themeToggle');
-  // theme toggle handler
-  themeToggle.addEventListener('click', ()=>{
-    document.body.classList.toggle('dark-mode');
-    themeToggle.textContent = document.body.classList.contains('dark-mode') ? 'Light' : 'Dark';
-  });
-});
+      toggleBtn.textContent = next === "dark" ? "☀️" : "🌙";
+    });
+  </script>
 
+  <!-- TASK SYSTEM -->
+  <script>
+    const addTaskBtn = document.getElementById("addTaskBtn");
+    const taskList = document.getElementById("taskList");
+    const todayTasks = document.getElementById("todayTasks");
 
-// --- AI FUNCTION (Modified to use aiProcessUrl) ---
-async function sendToAI() {
-    const inputElement = document.getElementById("ai_input");
-    const askButton = document.querySelector(".input-group button");
-    const aiOutput = document.getElementById("ai_output");
-    const text = inputElement.value;
+    let tasks = [];
 
-    if (!text) {
-        aiOutput.innerText = "Please enter a question or a task reminder.";
-        return;
-    }
+    addTaskBtn.addEventListener("click", () => {
+      const name = prompt("Task name:");
+      if (!name) return;
 
-    askButton.disabled = true;
-    inputElement.disabled = true;
-    aiOutput.innerText = "Processing request... Please wait.";
+      const task = { name, done: false };
+      tasks.push(task);
+      renderTasks();
+    });
 
-    try {
-        // Use the Jinja-defined variable for the route
-        const res = await fetch(aiProcessUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_input: text })
-        });
+    function renderTasks() {
+      taskList.innerHTML = "";
+      todayTasks.innerHTML = "";
 
-        if (!res.ok) {
-            throw new Error(`HTTP error! status: ${res.status}`);
+      tasks.forEach((t, i) => {
+        const card = document.createElement("div");
+        card.className = "task-card";
+        card.innerHTML = `
+          <strong>${t.name}</strong>
+          <br>
+          <button class="btn btn-sm btn-success mt-2">Done</button>
+        `;
+
+        card.querySelector("button").onclick = () => {
+          t.done = true;
+          renderTasks();
+        };
+
+        taskList.appendChild(card);
+
+        if (!t.done) {
+          todayTasks.appendChild(card.cloneNode(true));
         }
-
-        const data = await res.json();
-
-        // If AI returns an error → show it
-        if (data.type === "error") {
-            aiOutput.innerText = "❌ Error:\n" + (data.message || JSON.stringify(data, null, 2));
-            return;
-        }
-
-        // If AI returns a general conversation → show it
-        if (data.action !== "add") {
-             // For general chat, display the response cleanly
-            const chatResponse = data.response || "I am sorry, I could not generate a chat response.";
-            aiOutput.innerText = "🤖 Assistant:\n" + chatResponse;
-            return;
-        }
-
-        // If AI successfully added a task
-        // Clean up the ISO string for display (remove Z and milliseconds)
-        const timeDisplay = data.reminder_time 
-            ? data.reminder_time.replace('Z', '').substring(0, 16) 
-            : 'None';
-            
-        aiOutput.innerText =
-            "✅ Task added:\n" +
-            "Task: " + data.task + "\n" +
-            "Time (UTC): " + timeDisplay;
-
-        // Refresh automatically to show the new task
-        setTimeout(() => {
-            window.location.reload();
-        }, 800);
-        
-    } catch (e) {
-        aiOutput.innerText = "❌ Network or unexpected error: " + e.message;
-    } finally {
-        askButton.disabled = false;
-        inputElement.disabled = false;
-        inputElement.value = '';
+      });
     }
-}
-</script>
+  </script>
 
 </body>
 </html>
