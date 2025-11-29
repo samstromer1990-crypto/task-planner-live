@@ -244,36 +244,95 @@
 
     
 <script>
+/* small helper to escape text so raw JSON doesn't become unsafe HTML */
+function escapeHtml(unsafe) {
+  if (unsafe === null || unsafe === undefined) return "";
+  return String(unsafe)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function prettyTaskFromResponse(data) {
+  // If backend returns a unified message, prefer that
+  if (data.message) return data.message;
+
+  // If we have a structured AI result (result/action), create a human-friendly sentence
+  const action = data.action || data.type || "";
+  const task = data.task || "";
+  const date = data.reminder_time || data.date || "";
+  const extra = data.extra || "";
+
+  if (action === "add") {
+    return `Scheduled: "${task}" ${date ? "at " + date : ""}`.trim();
+  }
+  if (action === "general" || action === "answer") {
+    if (extra) return `${extra}`;
+    if (task) return `Task: ${task}`;
+    return "AI answered your question.";
+  }
+
+  // fall back to showing a short JSON summary
+  try {
+    return JSON.stringify(data, ["type", "action", "task", "date", "extra", "message"], 2);
+  } catch (e) {
+    return String(data);
+  }
+}
+
 async function sendToAI() {
-    const text = document.getElementById("ai_input").value;
-    const chat = document.getElementById("ai_chat");
+  const inputEl = document.getElementById("ai_input");
+  const chat = document.getElementById("ai_chat");
+  const text = inputEl.value || "";
 
-    chat.innerHTML += `<div><b>You:</b> ${text}</div>`;
+  if (!text.trim()) return;
 
-    const res = await fetch("/ai-process", {
+  // show user message
+  chat.innerHTML += `<div><b>You:</b> ${escapeHtml(text)}</div>`;
+  inputEl.value = "";
+  chat.scrollTop = chat.scrollHeight;
+
+  let res, data;
+  try {
+    res = await fetch("/ai-process", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_input: text })
     });
-
-    const data = await res.json();
-
-    // Append AI response to chat box
-    chat.innerHTML += `<div class="mt-2"><b>AI:</b> ${JSON.stringify(data, null, 2)}</div>`;
+    data = await res.json();
+  } catch (err) {
+    chat.innerHTML += `<div class="mt-2"><b>AI:</b> Error contacting server: ${escapeHtml(err.message || err)}</div>`;
     chat.scrollTop = chat.scrollHeight;
+    return;
+  }
 
-    // If task added → refresh UI
-    if (data.action === "add") {
-        setTimeout(() => window.location.reload(), 800);
-    }
+  // Create a readable message
+  let human = "";
+  if (data.type === "error") {
+    human = data.message || data.raw || "AI error";
+  } else {
+    human = prettyTaskFromResponse(data);
+  }
+
+  // show AI message
+  chat.innerHTML += `<div class="mt-2"><b>AI:</b> <pre style="display:inline;white-space:pre-wrap;margin:0">${escapeHtml(human)}</pre></div>`;
+  chat.scrollTop = chat.scrollHeight;
+
+  // if a task was added, refresh list after a short delay
+  // backend should return action:"add" on success (see backend patch)
+  if (data.action === "add" || (data.type === "success" && data.action === "add")) {
+    setTimeout(() => window.location.reload(), 700);
+  }
 }
 </script>
-
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 </body>
 </html>
+
 
 
 
