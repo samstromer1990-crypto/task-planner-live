@@ -1,394 +1,485 @@
+
+# app.py — cleaned full application (Gemini: gemini-2.0-flash)
+# Replace your current app.py with this file. Ensure requirements.txt includes:
+# flask, requests, python-dotenv, authlib, google-generativeai, apscheduler, dateparser
+
+from dotenv import load_dotenv
 import os
-import time
-import json
+import urllib.parse
 import requests
-from flask import Flask, request, redirect, url_for, flash, session, jsonify, render_template
-from firebase_admin import initialize_app, credentials, firestore, auth
-# We need to import Schema and Type from the Generative AI library 
-# even though we use direct requests, because these define the required structure.
-from google.generativeai.types import Schema, Type 
-from dateutil import parser
-from datetime import datetime
+import smtplib
+import json
+import dateparser
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime, timezone, timedelta
+import time
 
-# --- Configuration ---
-# Global variables provided by the Canvas environment
-try:
-    FIREBASE_CONFIG = json.loads(os.environ['__firebase_config'])
-    APP_ID = os.environ.get('__app_id', 'default-app-id')
-    INITIAL_AUTH_TOKEN = os.environ.get('__initial_auth_token')
-    # Use the existing environment variable for the Gemini API key
-    GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
-except KeyError:
-    # Fallback for local development or testing outside the Canvas environment
-    FIREBASE_CONFIG = {}
-    APP_ID = 'default-app-id'
-    INITIAL_AUTH_TOKEN = None
-    GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'YOUR_GEMINI_API_KEY') 
+from flask import Flask, redirect, url_for, session, render_template, request, jsonify
+from authlib.integrations.flask_client import OAuth
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+from collections import Counter
 
-# --- Initialize Flask and Firebase ---
-app = Flask(__name__)
-# The secret key is mandatory for Flask session management (used to store user data)
-app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'a_default_secure_secret_key') 
+# ---------------------- Load config ----------------------
+load_dotenv()
+app = Flask(__name__, static_folder="static", template_folder="templates")
 
-# Initialize Firebase Admin SDK
-db = None
-if FIREBASE_CONFIG:
-    try:
-        # Initialize only if the app hasn't been initialized yet
-        if not firestore._apps: 
-            # Use service account credentials if available
-            cred = credentials.Certificate(FIREBASE_CONFIG) if 'type' in FIREBASE_CONFIG else None
-            initialize_app(cred)
-        db = firestore.client()
-        # print("Firebase initialized successfully.")
-    except Exception as e:
-        # print(f"Error initializing Firebase Admin SDK: {e}")
-        db = None 
+# Secrets & config from environment
+app.secret_key = os.getenv("SECRET_KEY", os.urandom(24).hex())
 
-# --- Constants ---
-# Define the structured output schema for the AI assistant
-TASK_SCHEMA = Schema(
-    type=Type.OBJECT,
-    properties={
-        "task": Schema(type=Type.STRING, description="The content of the task or reminder."),
-        "reminder_time": Schema(type=Type.STRING, description="The detected future datetime for the task in ISO 8601 format (e.g., '2025-12-01T15:00:00'). If no time is explicitly mentioned, return null."),
-        "action": Schema(type=Type.STRING, description="The action to perform: 'add' if a specific task/reminder is mentioned, or 'chat' for general questions.")
-    },
-    required=["task", "action"]
-)
+# Airtable
+AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY")
+AIRTABLE_BASE_ID = os.getenv("AIRTABLE_BASE_ID")
+AIRTABLE_TABLE_NAME = os.getenv("AIRTABLE_TABLE_NAME", "Tasks")
 
-# --- Authentication and User Management ---
+# Email (SMTP)
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER")
+SMTP_PASS = os.getenv("SMTP_PASS")
+EMAIL_FROM = os.getenv("EMAIL_FROM", SMTP_USER)
+EMAIL_TO = os.getenv("EMAIL_TO")
 
-def get_current_user():
-    """Authenticates the user using the initial token or handles the session."""
-    if 'user' in session:
-        return session['user']
+# Google OAuth (Authlib)
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 
-    # Attempt to sign in with custom token on first load
-    if INITIAL_AUTH_TOKEN and db:
-        try:
-            # Verify and decode the token to get user info
-            decoded_token = auth.verify_id_token(INITIAL_AUTH_TOKEN)
-            uid = decoded_token['uid']
-            name = decoded_token.get('name') or decoded_token.get('email', f"User_{uid[:4]}").split('@')[0] 
-            
-            user_data = {
-                'id': uid,
-                'name': name,
-                'email': decoded_token.get('email', 'N/A')
-            }
-            session['user'] = user_data
-            return user_data
-        except Exception:
-            # Error during token verification
-            session.pop('user', None) 
-            return None
-    
-    return None
-
-def get_user_tasks(user_id):
-    """Fetches all tasks for the current user from the secure path."""
-    if not db:
-        # print("Database not available.")
-        return []
-        
-    # Secure Private data path: /artifacts/{appId}/users/{userId}/tasks
-    tasks_ref = db.collection(f'artifacts/{APP_ID}/users/{user_id}/tasks').order_by('created_at')
-    tasks = []
-    
-    try:
-        docs = tasks_ref.stream()
-
-        for doc in docs:
-            task = doc.to_dict()
-            task['id'] = doc.id
-            
-            raw_time = task.get('reminder_time')
-            if raw_time:
-                if isinstance(raw_time, str):
-                    dt_iso = raw_time
-                elif isinstance(raw_time, datetime):
-                    dt_iso = raw_time.isoformat()
-                else:
-                    dt_iso = '' 
-                    
-                # Truncate to the format required by HTML datetime-local (YYYY-MM-DDThh:mm)
-                task['raw_reminder_time'] = dt_iso[:16] 
-            else:
-                task['raw_reminder_time'] = ''
-
-            tasks.append(task)
-        
-        # Sort in memory: Pending tasks first, then completed.
-        tasks.sort(key=lambda t: (t.get('completed', False), t.get('raw_reminder_time') or '9999-12-31T23:59'))
-        
-        return tasks
-    except Exception as e:
-        print(f"Error fetching tasks: {e}")
-        return []
-
-# --- AI Assistant Logic (Backend Processing) ---
-
-def ask_ai_gemini(prompt: str, schema: Schema = None):
-    """
-    Calls the Gemini API using requests for structured output stability.
-    Implements exponential backoff.
-    """
-    if not GEMINI_API_KEY or GEMINI_API_KEY == 'YOUR_GEMINI_API_KEY':
-        return {"error": "Gemini API Key is not configured."}
-
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={GEMINI_API_KEY}"
-    
-    system_instruction = (
-        "You are an expert task planner and scheduler named 'PlanHub AI'. "
-        "Your primary goal is to analyze the user's input and respond strictly using the provided JSON schema."
-        "If the input clearly requests a task or reminder, set the action to 'add' and extract the task and the future datetime in ISO 8601 format (e.g., 2025-12-01T15:00:00). If the time is not specified, set reminder_time to null."
-        "If the input is a general question (not a task), set the action to 'chat' and use the 'task' field for your natural language, helpful response."
+# ---------------------- OAuth ----------------------
+oauth = OAuth(app)
+if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
+    google = oauth.register(
+        name="google",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid email profile"},
     )
-    
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "systemInstruction": {"parts": [{"text": system_instruction}]}
-    }
+else:
+    google = None
 
-    if schema:
-        # Set the generationConfig for structured output
-        payload["generationConfig"] = {
-            "responseMimeType": "application/json",
-            "responseSchema": schema.to_dict() 
-        }
+# ---------------------- Airtable helpers ----------------------
+def airtable_url():
+    if not AIRTABLE_BASE_ID or not AIRTABLE_TABLE_NAME:
+        return None
+    return f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{urllib.parse.quote(AIRTABLE_TABLE_NAME)}"
 
-    headers = {'Content-Type': 'application/json'}
+def at_headers(json=False):
+    h = {}
+    if AIRTABLE_API_KEY:
+        h["Authorization"] = f"Bearer {AIRTABLE_API_KEY}"
+    if json:
+        h["Content-Type"] = "application/json"
+    return h
 
-    max_retries = 5
-    for attempt in range(max_retries):
-        try:
-            response = requests.post(api_url, headers=headers, data=json.dumps(payload))
-            response.raise_for_status() 
-            
-            result = response.json()
-            candidate = result.get('candidates', [{}])[0]
-            
-            if candidate.get('content') and candidate['content'].get('parts'):
-                content_part = candidate['content']['parts'][0].get('text', '').strip()
-                
-                if 'responseMimeType' in payload.get('generationConfig', {}):
-                    # Attempt to find and parse the JSON block (handling markdown fences)
-                    json_text = content_part.strip('` \n')
-                    if json_text.startswith('```json'):
-                        json_text = json_text.strip('```json').strip('` \n')
-                    
-                    return json.loads(json_text)
+# ---------------------- AI helper (Gemini) ----------------------
+# google-generativeai client
+try:
+    import google.generativeai as genai
+    HAS_GEMINI_SDK = True
+except Exception:
+    HAS_GEMINI_SDK = False
 
-                # Otherwise, return plain text response
-                return {"action": "chat", "task": content_part}
-            
-            return {"error": f"API returned no content or candidates: {result}"}
-
-        except requests.exceptions.RequestException as e:
-            if attempt < max_retries - 1:
-                wait_time = 2 ** attempt
-                time.sleep(wait_time)
-            else:
-                return {"error": f"Gemini API request failed after {max_retries} attempts: {e}"}
-        except json.JSONDecodeError as e:
-            # print(f"JSON Decode Error: {e}. Raw Response: {response.text if 'response' in locals() else 'N/A'}")
-            return {"error": "AI returned invalid JSON format. Try simplifying your query."}
-        except Exception as e:
-            return {"error": f"An unexpected error occurred during API processing: {e}"}
-    return {"error": "Exited retry loop without a successful response."} 
-
-# --- CRUD Helper Function ---
-def get_task_ref(user_id, task_id):
-    """Returns the Firestore DocumentReference for a specific task."""
-    if not db:
-        raise Exception("Database is not initialized.")
-    # Use the full secure path
-    return db.document(f'artifacts/{APP_ID}/users/{user_id}/tasks/{task_id}')
-
-# --- Flask Routes ---
-
-@app.route('/')
-def index():
-    """Simple route to redirect authenticated users to the dashboard."""
-    user = get_current_user()
-    if user:
-        return redirect(url_for('dashboard'))
-    return redirect(url_for('dashboard')) 
-
-@app.route('/dashboard')
-def dashboard():
-    """Main dashboard showing tasks."""
-    user = get_current_user()
-    if not user:
-        user = {'id': 'unauthenticated', 'name': 'Guest'}
-    
-    tasks = get_user_tasks(user['id'])
-    
-    # Note: Using the assumed template path 'templates/dashboard.html'
-    return render_template('templates/dashboard.html', user=user, tasks=tasks)
-
-@app.route('/logout')
-def logout():
-    """Logs out the user by clearing the Flask session."""
-    session.pop('user', None)
-    flash('You have been logged out.', 'success')
-    return redirect(url_for('index'))
-
-@app.route('/add-task', methods=['POST'])
-def add_task():
-    """Adds a task manually via the form."""
-    user = get_current_user()
-    if not user or not db:
-        flash('Authentication required or database unavailable.', 'danger')
-        return redirect(url_for('dashboard'))
-
-    task_name = request.form.get('task_name')
-    reminder_time_str = request.form.get('reminder_time')
-    
-    if not task_name:
-        flash('Task description is required.', 'danger')
-        return redirect(url_for('dashboard'))
-
-    task_data = {
-        'task': task_name,
-        'completed': False,
-        'created_at': firestore.SERVER_TIMESTAMP,
-        # Store as ISO string (YYYY-MM-DDThh:mm) or None
-        'reminder_time': reminder_time_str if reminder_time_str else None
-    }
-    
+# Configure Gemini key
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY and HAS_GEMINI_SDK:
     try:
-        tasks_ref = db.collection(f'artifacts/{APP_ID}/users/{user["id"]}/tasks')
-        tasks_ref.add(task_data)
-        flash('Task added successfully!', 'success')
-    except Exception as e:
-        flash(f'Failed to add task: {e}', 'danger')
+        genai.configure(api_key=GEMINI_API_KEY)
+    except Exception:
+        GEMINI_API_KEY = None
 
-    return redirect(url_for('dashboard'))
+# System prompt — enforce exact JSON output
+SYSTEM_PROMPT = """
+You are an AI Task Planner Assistant.
+Convert the user message into JSON in EXACTLY this format (no extra text outside the JSON):
 
-@app.route('/update-time/<task_id>', methods=['POST'])
-def update_task_time(task_id):
-    """Updates the reminder time for an existing task."""
-    user = get_current_user()
-    if not user or not db:
-        flash('Authentication required or database unavailable.', 'danger')
-        return redirect(url_for('dashboard'))
+{
+  "action": "",
+  "task": "",
+  "date": "",
+  "extra": ""
+}
 
-    new_time_str = request.form.get('reminder_time') or None
-    
-    try:
-        task_ref = get_task_ref(user['id'], task_id)
-        
-        if task_ref.get().exists:
-            task_ref.update({'reminder_time': new_time_str})
-            flash('Task reminder time updated!', 'success')
-        else:
-            flash('Task not found.', 'danger')
-    except Exception as e:
-        flash(f'Failed to update task time: {e}', 'danger')
-    
-    return redirect(url_for('dashboard'))
+If the user message is not a task command, return action="general".
+"""
 
-
-@app.route('/complete/<task_id>')
-def complete_task(task_id):
-    """Marks a task as completed."""
-    user = get_current_user()
-    if not user or not db:
-        flash('Authentication required or database unavailable.', 'danger')
-        return redirect(url_for('dashboard'))
+def ask_ai_gemini(user_text):
+    """Call Gemini (gemini-2.0-flash). Returns dict: either {"type":"success","result": parsed_json}
+    or {"type":"error","message": "...", "raw": "..."}."""
+    prompt = f"{SYSTEM_PROMPT}\nUser: {user_text}\nAssistant:"
+    if not GEMINI_API_KEY or not HAS_GEMINI_SDK:
+        return {"type": "error", "message": "Gemini not configured on server."}
 
     try:
-        task_ref = get_task_ref(user['id'], task_id)
-        if task_ref.get().exists:
-            task_ref.update({'completed': True, 'completed_at': firestore.SERVER_TIMESTAMP})
-            flash('Task marked as complete!', 'success')
-        else:
-            flash('Task not found.', 'danger')
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": 0.2,
+                "top_p": 0.8,
+                "max_output_tokens": 512
+            }
+        )
+        txt = (response.text or "").strip()
     except Exception as e:
-        flash(f'Failed to complete task: {e}', 'danger')
-    
-    return redirect(url_for('dashboard'))
+        return {"type": "error", "message": f"Gemini request failed: {e}", "raw": str(e)}
 
-@app.route('/delete/<task_id>')
-def delete_task(task_id):
-    """Deletes a task."""
-    user = get_current_user()
-    if not user or not db:
-        flash('Authentication required or database unavailable.', 'danger')
-        return redirect(url_for('dashboard'))
-
+    # Extract JSON substring and parse
     try:
-        task_ref = get_task_ref(user['id'], task_id)
-        if task_ref.get().exists:
-            task_ref.delete()
-            flash('Task deleted successfully.', 'success')
-        else:
-            flash('Task not found.', 'danger')
+        start = txt.find("{")
+        end = txt.rfind("}") + 1
+        if start == -1 or end == 0 or end <= start:
+            return {"type": "error", "message": "Gemini returned no JSON", "raw": txt}
+        json_str = txt[start:end]
+        parsed = json.loads(json_str)
+        return {"type": "success", "result": parsed}
     except Exception as e:
-        flash(f'Failed to delete task: {e}', 'danger')
+        return {"type": "error", "message": "Failed to parse Gemini JSON", "raw": txt}
 
-    return redirect(url_for('dashboard'))
+def ask_ai(user_text):
+    """Wrapper for AI calls."""
+    if not user_text:
+        return {"type": "error", "message": "No input provided."}
+    return ask_ai_gemini(user_text)
 
-@app.route('/ai-process', methods=['POST'])
+# ---------------------- Natural language date parser ----------------------
+def parse_natural_date(text):
+    if not text:
+        return None
+    dt = dateparser.parse(
+        text,
+        settings={"TIMEZONE": "Asia/Kolkata", "RETURN_AS_TIMEZONE_AWARE": False}
+    )
+    if not dt:
+        return None
+    return dt.strftime("%Y-%m-%dT%H:%M")
+
+# ---------------------- AI processing endpoint ----------------------
+@app.route("/ai-process", methods=["POST"])
 def ai_process():
-    """Handles the AI Assistant request for structured task extraction or chat."""
-    user = get_current_user()
-    if not user:
-        return jsonify({"type": "error", "message": "Authentication required."}), 401
-    
-    data = request.json
-    user_input = data.get('user_input')
-    
+    payload = request.get_json(silent=True) or {}
+    user_input = payload.get("user_input") or payload.get("text") or ""
+
     if not user_input:
-        return jsonify({"type": "error", "message": "No input provided."}), 400
+        return jsonify({"type": "error", "message": "No text provided"}), 400
 
-    # 1. Call the AI model using the structured schema (TASK_SCHEMA)
-    ai_response = ask_ai_gemini(user_input, schema=TASK_SCHEMA)
+    # 1. Ask Gemini
+    ai_reply = ask_ai(user_input)
 
-    if ai_response.get('error'):
-        return jsonify({"type": "error", "message": ai_response['error']}), 500
+    # If Gemini failed → return error
+    if ai_reply.get("type") == "error":
+        return jsonify(ai_reply)
 
-    # Sanitize and extract results
-    action = ai_response.get('action', '').lower()
-    task_content = ai_response.get('task')
-    reminder_time = ai_response.get('reminder_time')
+    # AI result fields
+    result = ai_reply.get("result", {})
 
-    if action == 'add' and task_content:
-        if not db:
-            return jsonify({"type": "error", "message": "Database is not initialized. Cannot save task."}), 500
-        
-        # 2. If action is 'add', save the task to Firestore
-        task_data = {
-            'task': task_content,
-            'completed': False,
-            'created_at': firestore.SERVER_TIMESTAMP,
-            'reminder_time': reminder_time if reminder_time else None # Stored as ISO string or None
-        }
-        
-        try:
-            tasks_ref = db.collection(f'artifacts/{APP_ID}/users/{user["id"]}/tasks')
-            tasks_ref.add(task_data)
-            
-            # Return success confirmation for the frontend to handle the reload
+    action = result.get("action") 
+    task_name = result.get("task")
+    date_text = result.get("date")
+    extra = result.get("extra")
+
+    # If action is NOT "add" → return AI result to front-end
+    if action != "add":
+        return jsonify(result)
+
+    # Convert natural language date → datetime-local
+    reminder_time = parse_natural_date(date_text) if date_text else None
+
+    # 4. Save to Airtable
+    url = airtable_url()
+    if not url:
+        return jsonify({"type": "error", "message": "Airtable not configured"})
+    
+    fields = {
+        "Task Name": task_name,
+        "Completed": False,
+        "Email": session["user"]["email"]
+    }
+    
+    if reminder_time:
+       fields["Reminder Local"] = reminder_time
+    
+    payload = { "fields": fields }
+    
+    
+    try:
+        resp = requests.post(url, json=payload, headers=at_headers(json=True))
+        if resp.status_code not in (200, 201):
             return jsonify({
-                "type": "success", 
-                "action": "add",
-                "task": task_content,
-                "reminder_time": reminder_time if reminder_time else None
+                "type": "error",
+                "message": "Airtable save failed",
+                "raw": resp.text
             })
+    except Exception as e:
+        return jsonify({"type": "error", "message": f"Airtable error: {e}"})
+
+    # 5. Return success response to front-end
+    return jsonify({
+        "type": "success",
+        "action": "add",
+        "task": task_name,
+        "reminder_time": reminder_time
+    })
+# ---------------------- Landing & Auth ----------------------
+@app.route("/")
+def index():
+    if session.get("user"):
+        return redirect("/dashboard")
+    return render_template("landing.html")
+
+@app.route("/login")
+def login():
+    if not google:
+        return "Google OAuth not configured", 500
+    return google.authorize_redirect(url_for("authorize", _external=True))
+
+@app.route("/authorize")
+def authorize():
+    if not google:
+        return "Google OAuth not configured", 500
+    token = google.authorize_access_token()
+    google.load_server_metadata()
+    resp = google.get(google.server_metadata["userinfo_endpoint"], token=token)
+    ui = resp.json()
+    session["user"] = {
+        "name": ui.get("name"),
+        "email": ui.get("email"),
+        "picture": ui.get("picture")
+    }
+    return redirect("/dashboard")
+
+@app.route("/logout")
+def logout():
+    session.pop("user", None)
+    return redirect("/")
+
+# ---------------------- Dashboard ----------------------
+@app.route("/dashboard")
+def dashboard():
+    if "user" not in session:
+        return redirect("/")
+
+    url = airtable_url()
+    records = []
+    if url:
+        try:
+            r = requests.get(url, headers=at_headers(), timeout=15)
+            try:
+                records = r.json().get("records", [])
+            except Exception:
+                print("Airtable fetch error (dashboard):", r.status_code, r.text[:300])
+                records = []
         except Exception as e:
-            return jsonify({"type": "error", "message": f"Failed to save task to database: {e}"}), 500
-
-    elif action == 'chat' and task_content:
-        # 3. If action is 'chat', return the AI's natural language response
-        return jsonify({"type": "success", "action": "chat", "response": task_content})
-
+            print("Airtable request exception (dashboard):", e)
+            records = []
     else:
-        # Fallback for unexpected structured output or missing data
-        return jsonify({"type": "error", "message": "AI returned an unknown action or incomplete data."}), 500
+        print("Airtable config missing (BASE_ID or TABLE_NAME)")
 
-if __name__ == '__main__':
-    # Default port for local testing
-    app.run(host='0.0.0.0', port=5000)
+    IST_OFFSET = timedelta(hours=5, minutes=30)
+    def to_ist(dt):
+        if not dt:
+            return ""
+        try:
+            utc_time = datetime.fromisoformat(dt.replace("Z", "")).replace(tzinfo=timezone.utc)
+            ist_time = utc_time + IST_OFFSET
+            return ist_time.strftime("%Y-%m-%dT%H:%M")
+        except:
+            return dt
+
+    tasks = []
+    for r in records:
+        tasks.append({
+            "id": r.get("id"),
+            "task": r.get("fields", {}).get("Task Name", ""),
+            "completed": r.get("fields", {}).get("Completed", False),
+            "raw_reminder_time": to_ist(r.get("fields", {}).get("Reminder Local", "")),
+        })
+
+    return render_template("dashboard.html", user=session.get("user"), tasks=tasks)
+
+# ---------------------- Task actions ----------------------
+@app.route("/add-task", methods=["POST"])
+def add_task():
+    if "user" not in session:
+        return "Not logged in", 403
+    task_name = request.form.get("task_name")
+    reminder_time = request.form.get("reminder_time")
+    url = airtable_url()
+    if not url:
+        return "Airtable not configured", 500
+
+    payload = {"fields": {"Task Name": task_name, "Completed": False, "Reminder Local": reminder_time, "Email": session['user'].get("email")}}
+    try:
+        resp = requests.post(url, json=payload, headers=at_headers(json=True), timeout=15)
+    except Exception as e:
+        print("Airtable POST exception (add_task):", e)
+        return f"Airtable POST exception: {e}", 500
+
+    if resp.status_code not in (200, 201):
+        print("Airtable add error:", resp.status_code, resp.text)
+        return f"Airtable add error: {resp.status_code} - {resp.text}", 500
+
+    return redirect("/dashboard")
+
+@app.route("/complete/<record_id>")
+def complete_task(record_id):
+    url = airtable_url()
+    if not url:
+        return "Airtable not configured", 500
+    resp = requests.patch(f"{url}/{record_id}", json={"fields": {"Completed": True}}, headers=at_headers(json=True))
+    if resp.status_code not in (200, 201):
+        return f"Airtable error (complete): {resp.status_code} - {resp.text}", 500
+    return redirect("/dashboard")
+
+@app.route("/update-time/<record_id>", methods=["POST"])
+def update_time(record_id):
+    new_time = request.form.get("reminder_time")
+    url = airtable_url()
+    if not url:
+        return "Airtable not configured", 500
+    resp = requests.patch(f"{url}/{record_id}", json={"fields": {"Reminder Local": new_time}}, headers=at_headers(json=True))
+    if resp.status_code not in (200, 201):
+        return f"Airtable error (update-time): {resp.status_code} - {resp.text}", 500
+    return redirect("/dashboard")
+
+# ---------------------- Email reminder system ----------------------
+def send_reminder_email(task_name, reminder_time):
+    msg = MIMEMultipart()
+    msg["From"] = EMAIL_FROM
+    msg["To"] = EMAIL_TO
+    msg["Subject"] = f"⏰ Reminder: {task_name}"
+    msg.attach(MIMEText(f"Task: {task_name}\nTime: {reminder_time}", "plain"))
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.send_message(msg)
+        return True
+    except Exception as e:
+        print("SMTP send error:", e)
+        return False
+
+def notify_due_tasks():
+    formula = """
+    AND(
+      {Completed}=0,
+      {Reminder Local} <= NOW(),
+      OR(
+        {Last Notified At}=BLANK(),
+        DATETIME_DIFF(NOW(), {Last Notified At}, 'minutes') >= 1
+      )
+    )
+    """
+    params = {"filterByFormula": formula.replace("\n", "")}
+    url = airtable_url()
+    records = []
+    if url:
+        try:
+            r = requests.get(url, headers=at_headers(), params=params, timeout=15)
+            records = r.json().get("records", [])
+        except Exception as e:
+            print("Airtable notify fetch error:", e)
+            records = []
+    for rec in records:
+        task_name = rec.get("fields", {}).get("Task Name", "Task")
+        reminder_time = rec.get("fields", {}).get("Reminder Local", "")
+        send_reminder_email(task_name, reminder_time)
+        try:
+            requests.patch(f"{url}/{rec['id']}", json={"fields": {"Last Notified At": datetime.now(timezone.utc).isoformat()}}, headers=at_headers(json=True))
+        except Exception as e:
+            print("Airtable patch after notify error:", e)
+
+@app.route("/test-reminder")
+def test_reminder():
+    notify_due_tasks()
+    return "Reminder check done ✅"
+
+# ---------------------- Debug helper ----------------------
+@app.route("/debug-records")
+def debug_records():
+    url = airtable_url()
+    if not url:
+        return jsonify({"error": "Airtable not configured"})
+    r = requests.get(url, headers=at_headers())
+    try:
+        return jsonify(r.json())
+    except Exception:
+        return f"Airtable debug error: status {r.status_code} - {r.text}", 500
+
+# ---------------------- Stats for charts ----------------------
+def fetch_all_records():
+    url = airtable_url()
+    headers = {"Authorization": f"Bearer {AIRTABLE_API_KEY}"} if AIRTABLE_API_KEY else {}
+    records = []
+    params = {}
+    if not url:
+        return records
+    while True:
+        resp = requests.get(url, headers=headers, params=params)
+        try:
+            payload = resp.json()
+        except Exception as e:
+            print("Airtable fetch_all_records json error:", e, resp.status_code, resp.text[:300])
+            break
+        records.extend(payload.get("records", []))
+        offset = payload.get("offset")
+        if not offset:
+            break
+        params["offset"] = offset
+    return records
+
+@app.route("/stats.json")
+def stats_json():
+    recs = fetch_all_records()
+    categories = ["Work", "Study", "Personal"]
+    def f(r, name, default=None):
+        return r.get("fields", {}).get(name, default)
+    def record_date(r):
+        dt = f(r, "Reminder Local") or f(r, "Reminder Time")
+        if not dt:
+            return None
+        try:
+            dt = dt.replace("Z", "")
+            return datetime.fromisoformat(dt).date().isoformat()
+        except:
+            return None
+    total_tasks = len(recs)
+    completed_by_category = Counter()
+    total_by_category = Counter()
+    completed_over_time = Counter()
+    for r in recs:
+        cat = f(r, "Category") or "Uncategorized"
+        done = bool(f(r, "Completed", False))
+        total_by_category[cat] += 1
+        if done:
+            completed_by_category[cat] += 1
+            d = record_date(r)
+            if d:
+                completed_over_time[d] += 1
+    completed_cat_counts = [completed_by_category.get(c, 0) for c in categories]
+    total_cat_counts = [total_by_category.get(c, 0) for c in categories]
+    timeline_dates = sorted(completed_over_time.keys())
+    timeline_values = [completed_over_time[d] for d in timeline_dates]
+    return {
+        "total_tasks": total_tasks,
+        "categories": categories,
+        "completed_by_category": completed_cat_counts,
+        "total_by_category": total_cat_counts,
+        "timeline_dates": timeline_dates,
+        "timeline_completed": timeline_values,
+    }
+
+# ---------------------- Scheduler ----------------------
+scheduler = BackgroundScheduler(timezone="UTC")
+scheduler.add_job(notify_due_tasks, IntervalTrigger(minutes=5), id="notify_due_tasks", replace_existing=True)
+scheduler.start()
+
+# ---------------------- Start ----------------------
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
+
+
+
+
