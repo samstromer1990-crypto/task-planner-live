@@ -1,10 +1,14 @@
+# app.py — cleaned full application (Gemini: gemini-2.0-flash)
+# Replace your current app.py with this file. Ensure requirements.txt includes:
+# flask, requests, python-dotenv, authlib, google-generativeai, apscheduler, dateparser
+
 from dotenv import load_dotenv
 import os
 import urllib.parse
 import requests
 import smtplib
+import json
 import dateparser
-
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone, timedelta
@@ -35,9 +39,6 @@ SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASS = os.getenv("SMTP_PASS")
 EMAIL_FROM = os.getenv("EMAIL_FROM", SMTP_USER)
 EMAIL_TO = os.getenv("EMAIL_TO")
-
-# Hugging Face Space URL (or custom API endpoint)
-HF_API_URL = None
 
 # Google OAuth (Authlib)
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
@@ -70,10 +71,7 @@ def at_headers(json=False):
         h["Content-Type"] = "application/json"
     return h
 
-
-# ---------------------- AI helper ----------------------
-import json
-
+# ---------------------- AI helper (Gemini) ----------------------
 # google-generativeai client
 try:
     import google.generativeai as genai
@@ -86,13 +84,13 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY and HAS_GEMINI_SDK:
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-    except:
+    except Exception:
         GEMINI_API_KEY = None
 
-# System prompt
+# System prompt — enforce exact JSON output
 SYSTEM_PROMPT = """
 You are an AI Task Planner Assistant.
-Convert the user message into JSON in EXACTLY this format:
+Convert the user message into JSON in EXACTLY this format (no extra text outside the JSON):
 
 {
   "action": "",
@@ -101,16 +99,18 @@ Convert the user message into JSON in EXACTLY this format:
   "extra": ""
 }
 
-If the user message is not a task, return action="general".
-No extra explanation OUTSIDE the JSON.
+If the user message is not a task command, return action="general".
 """
 
 def ask_ai_gemini(user_text):
+    """Call Gemini (gemini-2.0-flash). Returns dict: either {"type":"success","result": parsed_json}
+    or {"type":"error","message": "...", "raw": "..."}."""
     prompt = f"{SYSTEM_PROMPT}\nUser: {user_text}\nAssistant:"
+    if not GEMINI_API_KEY or not HAS_GEMINI_SDK:
+        return {"type": "error", "message": "Gemini not configured on server."}
 
     try:
         model = genai.GenerativeModel("gemini-2.0-flash")
-
         response = model.generate_content(
             prompt,
             generation_config={
@@ -119,61 +119,39 @@ def ask_ai_gemini(user_text):
                 "max_output_tokens": 512
             }
         )
-
         txt = (response.text or "").strip()
-
     except Exception as e:
-        return {
-            "type": "error",
-            "message": f"Gemini request failed: {e}",
-            "raw": str(e)
-        }
+        return {"type": "error", "message": f"Gemini request failed: {e}", "raw": str(e)}
 
-    # Extract JSON from output
+    # Extract JSON substring and parse
     try:
         start = txt.find("{")
         end = txt.rfind("}") + 1
+        if start == -1 or end == 0 or end <= start:
+            return {"type": "error", "message": "Gemini returned no JSON", "raw": txt}
         json_str = txt[start:end]
         parsed = json.loads(json_str)
         return {"type": "success", "result": parsed}
-    except:
-        return {"type": "error", "message": "Gemini returned non-JSON output", "raw": txt}
-
+    except Exception as e:
+        return {"type": "error", "message": "Failed to parse Gemini JSON", "raw": txt}
 
 def ask_ai(user_text):
-    """Gemini only — no HF fallback."""
+    """Wrapper for AI calls."""
     if not user_text:
         return {"type": "error", "message": "No input provided."}
+    return ask_ai_gemini(user_text)
 
-    if not GEMINI_API_KEY or not HAS_GEMINI_SDK:
-        return {"type": "error", "message": "Gemini is not configured on the server."}
-
-    resp = ask_ai_gemini(user_text)
-
-    if resp.get("type") == "success":
-        return resp.get("result")
-
-    return {
-        "type": "error",
-        "message": resp.get("message", "Gemini failed"),
-        "raw": resp.get("raw")
-    }
-
-
-# Natural language → datetime-local
+# ---------------------- Natural language date parser ----------------------
 def parse_natural_date(text):
     if not text:
         return None
-
     dt = dateparser.parse(
         text,
         settings={"TIMEZONE": "Asia/Kolkata", "RETURN_AS_TIMEZONE_AWARE": False}
     )
     if not dt:
         return None
-
     return dt.strftime("%Y-%m-%dT%H:%M")
-
 
 # ---------------------- AI processing endpoint ----------------------
 @app.route("/ai-process", methods=["POST"])
@@ -186,125 +164,56 @@ def ai_process():
     # Ask Gemini
     ai_reply = ask_ai(user_input)
 
+    # If error from Gemini
     if ai_reply.get("type") == "error":
         return jsonify(ai_reply)
 
-    # Extract JSON
-    action = ai_reply.get("action")
-    task_name = ai_reply.get("task")
-    date_text = ai_
-
-# ---------------------- Natural Language Date Parser ----------------------
-def parse_natural_date(text):
-    if not text:
-        return None
-    
-    dt = dateparser.parse(
-        text,
-        settings={"TIMEZONE": "Asia/Kolkata", "RETURN_AS_TIMEZONE_AWARE": False}
-    )
-    if not dt:
-        return None
-    
-    return dt.strftime("%Y-%m-%dT%H:%M")
-import dateparser
-
-def parse_natural_date(text):
-    if not text:
-        return None
-    
-    dt = dateparser.parse(
-        text,
-        settings={"TIMEZONE": "Asia/Kolkata", "RETURN_AS_TIMEZONE_AWARE": False}
-    )
-    if not dt:
-        return None
-    
-    # Convert to datetime-local format for HTML & Airtable
-    return dt.strftime("%Y-%m-%dT%H:%M")
-
-
-@app.route("/ai-process", methods=["POST"])
-def ai_process():
-    payload = request.get_json(silent=True) or {}
-    user_input = payload.get("user_input") or payload.get("text") or ""
-    if not user_input:
-        return jsonify({"type": "error", "message": "No text provided"}), 400
-
-    ai_reply = ask_ai(user_input)
-    # ensure ai_reply is JSON-serializable
-    try:
-        return jsonify(ai_reply)
-    except Exception as e:
-        return jsonify({"type":"error","message":"AI reply not serializable","detail":str(e),"raw":str(ai_reply)})
-# ---------------------- Landing & Auth ----------------------
-@app.route("/ai-process", methods=["POST"])
-
-def parse_natural_date(text):
-    if not text:
-        return None
-    
-    dt = dateparser.parse(
-        text,
-        settings={"TIMEZONE": "Asia/Kolkata", "RETURN_AS_TIMEZONE_AWARE": False}
-    )
-    if not dt:
-        return None
-    
-    return dt.strftime("%Y-%m-%dT%H:%M")
-def ai_process():
-    payload = request.get_json(silent=True) or {}
-    user_input = payload.get("user_input") or payload.get("text") or ""
-    if not user_input:
-        return jsonify({"type": "error", "message": "No text provided"}), 400
-
-    # 1. Ask AI
-    ai_reply = ask_ai(user_input)
-
-    # If AI error
-    if ai_reply.get("type") == "error":
-        return jsonify(ai_reply)
-
-    # Extract fields
+    # ai_reply is the parsed JSON object returned by Gemini (from ask_ai)
+    # Expected shape: {"action": "...", "task": "...", "date": "...", "extra": "..."}
     action = ai_reply.get("action")
     task_name = ai_reply.get("task")
     date_text = ai_reply.get("date")
 
-    # 2. If action is not "add", just return JSON
+    # If it's not an add action, return AI's JSON to the UI
     if action != "add":
         return jsonify(ai_reply)
 
-    # 3. Convert natural date → datetime-local format
+    # Convert natural-language date -> ISO datetime-local (for Airtable/html)
     reminder_time = parse_natural_date(date_text)
 
-    # 4. Save task to Airtable
+    # Save to Airtable
     url = airtable_url()
     if not url:
         return jsonify({"type": "error", "message": "Airtable not configured"})
 
-    payload = {
+    at_payload = {
         "fields": {
             "Task Name": task_name,
             "Completed": False,
             "Reminder Local": reminder_time,
-            "Email": session["user"].get("email")
+            "Email": session.get("user", {}).get("email")
         }
     }
-
     try:
-        resp = requests.post(url, json=payload, headers=at_headers(json=True))
+        resp = requests.post(url, json=at_payload, headers=at_headers(json=True), timeout=15)
         if resp.status_code not in (200, 201):
-            return {"type": "error", "message": "Airtable save failed", "raw": resp.text}
+            return jsonify({"type": "error", "message": "Airtable save failed", "raw": resp.text})
     except Exception as e:
-        return {"type": "error", "message": f"Airtable error: {e}"}
+        return jsonify({"type": "error", "message": f"Airtable error: {e}"})
 
-    # 5. Return success
     return jsonify({
         "type": "success",
         "message": "Task added successfully",
         "task": task_name,
         "reminder_time": reminder_time
     })
+
+# ---------------------- Landing & Auth ----------------------
+@app.route("/")
+def index():
+    if session.get("user"):
+        return redirect("/dashboard")
+    return render_template("landing.html")
 
 @app.route("/login")
 def login():
@@ -316,12 +225,10 @@ def login():
 def authorize():
     if not google:
         return "Google OAuth not configured", 500
-
     token = google.authorize_access_token()
     google.load_server_metadata()
     resp = google.get(google.server_metadata["userinfo_endpoint"], token=token)
     ui = resp.json()
-
     session["user"] = {
         "name": ui.get("name"),
         "email": ui.get("email"),
@@ -344,7 +251,7 @@ def dashboard():
     records = []
     if url:
         try:
-            r = requests.get(url, headers=at_headers())
+            r = requests.get(url, headers=at_headers(), timeout=15)
             try:
                 records = r.json().get("records", [])
             except Exception:
@@ -457,7 +364,7 @@ def notify_due_tasks():
     records = []
     if url:
         try:
-            r = requests.get(url, headers=at_headers(), params=params)
+            r = requests.get(url, headers=at_headers(), params=params, timeout=15)
             records = r.json().get("records", [])
         except Exception as e:
             print("Airtable notify fetch error:", e)
@@ -559,11 +466,3 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
-
-
-
-
-
-
-
-
