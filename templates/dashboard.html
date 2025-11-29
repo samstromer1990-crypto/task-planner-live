@@ -7,6 +7,7 @@
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
 
 <style>
 /* --- DESIGN SYSTEM BASED ON DESIRED IMAGE --- */
@@ -31,8 +32,23 @@ body{
   color:#111827;
 }
 
+/* Dark Mode (Basic structure for future implementation) */
+body.dark-mode {
+    --bg: #1e1e2d;
+    --panel: #27293d;
+    --metric-card: #27293d;
+    --muted: #a0a0b0;
+    --text: #f0f0f5;
+    color: var(--text);
+}
+body.dark-mode .task-row { border-color: #3b3d50; }
+body.dark-mode .chart-placeholder { background: #33354a; }
+body.dark-mode .calendar-widget { background: var(--panel); }
+body.dark-mode .progress-bar-custom { background-color: #3b3d50; }
+
+
 /* App Layout & Grid */
-.app-container { 
+.app-container { 
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
@@ -49,7 +65,13 @@ body{
   gap: 24px;
 }
 @media (max-width: 992px) {
-  .main-grid { grid-template-columns: 1fr; }
+  .main-grid { 
+        grid-template-columns: 1fr;
+        /* Sidebar comes first on mobile for contextual info */
+        grid-template-areas: "sidebar" "main-content";
+    }
+    .sidebar-content { grid-area: sidebar; }
+    .main-content-area { grid-area: main-content; }
 }
 
 /* General Card Styles */
@@ -72,7 +94,7 @@ body{
   gap: 24px;
 }
 .hero-main { flex: 1; }
-.hero-title { font-size: 20px; font-weight: 700; color: #111; margin: 0 0 4px; }
+.hero-title { font-size: 20px; font-weight: 700; color: inherit; margin: 0 0 4px; }
 .hero-subtitle { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
 
 .metrics-row {
@@ -119,10 +141,10 @@ body{
   box-shadow: 0 1px 4px rgba(0,0,0,0.05);
   text-align: center;
 }
-.chart-title { font-size: 12px; font-weight: 600; margin-bottom: 6px; color: #111; }
-.chart-area { 
-  height: 50px; 
-  background: #f0f0f0; 
+.chart-title { font-size: 12px; font-weight: 600; margin-bottom: 6px; color: inherit; }
+.chart-area { 
+  height: 50px; 
+  background: #f0f0f0; 
   border-radius: 6px;
   /* Simple bar representation */
   display: flex;
@@ -233,35 +255,46 @@ body{
 
 /* Adjustments for Bootstrap date input */
 .datetime-input { max-width: 170px; font-size: 13px; }
+
+/* Custom styling for flash messages */
+.flash-message-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1050; /* Above modals */
+    width: 300px;
+}
 </style>
 </head>
 <body>
 
 <div class="app-container">
   <div class="header-bar">
-    <h2 style="margin:0; font-weight:700">Welcome back <span id="userNameDisplay">👋</span></h2>
+    <h2 style="margin:0; font-weight:700">Welcome back <span id="userNameDisplay">{% if user.name %}{{ user.name.split(' ')[0] }}{% else %}there{% endif %} 👋</span></h2>
     <div class="d-flex gap-2">
       <button id="themeToggle" class="btn btn-outline-secondary btn-sm-custom">Dark</button>
+      <a class="btn btn-outline-secondary btn-sm-custom" href="{{ url_for('logout') }}">Logout</a>
       <button class="btn btn-primary-custom btn-sm-custom" data-bs-toggle="modal" data-bs-target="#addTaskModal">+ Add Task</button>
     </div>
   </div>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-      <div style="margin-bottom:18px;">
-        {% for category, message in messages %}
-          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert" style="border-radius:10px;">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-          </div>
-        {% endfor %}
-      </div>
-    {% endif %}
-  {% endwith %}
+    <!-- Flash Message Container -->
+    <div class="flash-message-container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show mt-2" role="alert" style="border-radius:10px;">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
 
     <div class="main-grid">
 
-        <div>
+        <div class="main-content-area">
             <section class="hero-container">
         <div class="hero-main">
           <p style="color:var(--muted); font-size:14px; margin-bottom: 2px;">Today's Task</p>
@@ -293,7 +326,7 @@ body{
             </div>
           </div>
         </div>
-        
+        
                 <div class="chart-placeholder d-none d-md-block">
           <div class="chart-title">This Week</div>
           <div style="font-size:10px; color:var(--muted)">Task Breakdown</div>
@@ -317,11 +350,11 @@ body{
         <div class="task-row {% if task.completed %}completed{% endif %}">
           <div class="task-details">
                         <div class="initials-avatar">{{ task.task[:2] | upper }}</div>
-            
+            
             <div>
               <p class="task-title-main">{{ task.task }}</p>
               <div class="task-meta">
-                Due: 
+                Due: 
                 {% if task.raw_reminder_time %}
                   {{ task.raw_reminder_time | replace('Z', '') | truncate(10, True, '') }}
                 {% else %}
@@ -334,12 +367,12 @@ body{
 
           <div class="task-actions">
             {% if not task.completed %}
-            <a href="/complete/{{ task.id }}" class="btn btn-primary-custom btn-sm-custom">Done</a>
+            <a href="{{ url_for('complete_task', record_id=task.id) }}" class="btn btn-primary-custom btn-sm-custom">Done</a>
             {% else %}
-            <a href="/complete/{{ task.id }}" class="btn btn-outline-secondary btn-sm-custom">Undo</a>
+            <a href="{{ url_for('complete_task', record_id=task.id) }}" class="btn btn-outline-secondary btn-sm-custom">Undo</a>
             {% endif %}
 
-            <a href="/delete/{{ task.id }}"
+            <a href="{{ url_for('delete_task', record_id=task.id) }}"
              class="btn btn-outline-danger btn-sm-custom"
              onclick="return confirm('Delete task: {{ task.task | e }}?');">
               Delete
@@ -347,7 +380,7 @@ body{
           </div>
         </div>
 
-                <form action="/update-time/{{ task.id }}" method="POST" class="d-flex align-items-center gap-2 mb-3 ms-5">
+                <form action="{{ url_for('update_time', record_id=task.id) }}" method="POST" class="d-flex align-items-center gap-2 mb-3 ms-5">
           <input type="datetime-local" name="reminder_time"
                  value="{{ task.raw_reminder_time | replace('Z', '') | truncate(16, True, '') }}"
                  class="form-control datetime-input">
@@ -358,7 +391,7 @@ body{
         {% if tasks|length == 0 %}
         <div class="alert alert-light border text-center mt-3" style="border-radius:10px;">No tasks yet. Click "+ Add Task" to create one.</div>
         {% endif %}
-        
+        
                 <div class="card-panel mt-4">
           <h5>AI Assistant 🤖</h5>
           <p class="text-muted small">Ask anything. AI will help extract tasks or chat.</p>
@@ -368,7 +401,7 @@ body{
             <button class="btn btn-primary-custom" onclick="sendToAI()">Ask</button>
           </div>
 
-          <pre id="ai_output" class="p-3" style="min-height:100px; white-space: pre-wrap; background:var(--bg); border-radius:10px; border:1px solid #e9e6f3;"></pre>
+          <pre id="ai_output" class="p-3" style="min-height:100px; white-space: pre-wrap; background:var(--bg); border-radius:10px; border:1px solid #e9e6f3;">Hello! Ask me to schedule a task or any general question.</pre>
         </div>
       </div>
     </div>
@@ -434,7 +467,7 @@ body{
         <button class="btn-close" data-bs-dismiss="modal"></button>
       </div>
 
-      <form action="/add-task" method="POST">
+      <form action="{{ url_for('add_task') }}" method="POST">
         <div class="modal-body">
           <label class="form-label small">Task Name</label>
           <input type="text" name="task_name" class="form-control mb-3" required>
@@ -449,29 +482,40 @@ body{
         </div>
       </form>
     </div>
-  </div>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
+    // Define the Flask route URL for AI processing using Jinja
+    const aiProcessUrl = "{{ url_for('ai_process') }}";
+
 // --- USERNAME LOGIC (Ensures the greeting works correctly) ---
 function checkAndSetUsername() {
-    let userName = localStorage.getItem('taskPlannerUserName');
-    
-    // If no name is found, prompt the user (optional, can be disabled after first run)
-    if (!userName) {
-        let input = prompt("Welcome! Please enter your name:");
-        if (input && input.trim() !== '') {
-            userName = input.trim();
-            localStorage.setItem('taskPlannerUserName', userName);
-        } else {
-            userName = 'there'; // Default name
-        }
+    let userName = localStorage.getItem('taskPlannerUserName');
+    
+    // If no name is found, prompt the user (optional, can be disabled after first run)
+    if (!userName && (typeof user === 'undefined' || !user.name)) {
+        let input = prompt("Welcome! Please enter your name:");
+        if (input && input.trim() !== '') {
+            userName = input.trim();
+            localStorage.setItem('taskPlannerUserName', userName);
+        } else {
+            userName = 'there'; // Default name
+        }
+    } else if (typeof user !== 'undefined' && user.name) {
+        userName = user.name; // Use authenticated name if available
+    } else {
+        userName = userName || 'there'; // Fallback
     }
-    
-    // Display only the first name for a friendly greeting
-    const firstName = userName.split(' ')[0];
-    document.getElementById('userNameDisplay').textContent = firstName + " 👋";
+
+    // Display only the first name for a friendly greeting
+    const firstName = userName.split(' ')[0];
+    const displayElement = document.getElementById('userNameDisplay');
+    if (displayElement) {
+        displayElement.textContent = firstName + " 👋";
+    }
 }
 
 // --- THEME TOGGLE AND ONLOAD ---
@@ -487,53 +531,72 @@ document.addEventListener('DOMContentLoaded', ()=> {
 });
 
 
-// --- AI FUNCTION (Kept as is) ---
+// --- AI FUNCTION (Modified to use aiProcessUrl) ---
 async function sendToAI() {
-    const text = document.getElementById("ai_input").value;
-    const aiOutput = document.getElementById("ai_output");
-    aiOutput.innerText = "Processing...";
+    const inputElement = document.getElementById("ai_input");
+    const askButton = document.querySelector(".input-group button");
+    const aiOutput = document.getElementById("ai_output");
+    const text = inputElement.value;
 
-    try {
-        const res = await fetch("/ai-process", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_input: text })
-        });
+    if (!text) {
+        aiOutput.innerText = "Please enter a question or a task reminder.";
+        return;
+    }
 
-        const data = await res.json();
+    askButton.disabled = true;
+    inputElement.disabled = true;
+    aiOutput.innerText = "Processing request... Please wait.";
 
-        // If AI returns an error → show it
-        if (data.type === "error") {
-            aiOutput.innerText = "❌ Error:\n" + (data.message || JSON.stringify(data, null, 2));
-            return;
+    try {
+        // Use the Jinja-defined variable for the route
+        const res = await fetch(aiProcessUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_input: text })
+        });
+
+        if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
         }
 
-        // If AI returns a general conversation → show it
-        if (data.action !== "add") {
-             // For general chat, display the response cleanly
-            const chatResponse = data.response || JSON.stringify(data, null, 2);
-            aiOutput.innerText = "🤖 Assistant:\n" + chatResponse;
-            return;
-        }
+        const data = await res.json();
 
-        // If AI successfully added a task
-        // Clean up the ISO string for display (remove Z and milliseconds)
-        const timeDisplay = data.reminder_time 
-            ? data.reminder_time.replace('Z', '').substring(0, 16) 
-            : 'None';
-            
-        aiOutput.innerText =
-            "✅ Task added:\n" +
-            "Task: " + data.task + "\n" +
-            "Time (UTC): " + timeDisplay;
+        // If AI returns an error → show it
+        if (data.type === "error") {
+            aiOutput.innerText = "❌ Error:\n" + (data.message || JSON.stringify(data, null, 2));
+            return;
+        }
 
-        // Refresh automatically to show the new task
-        setTimeout(() => {
-            window.location.reload();
-        }, 800);
-        
-    } catch (e) {
-        aiOutput.innerText = "❌ Network or unexpected error: " + e.message;
+        // If AI returns a general conversation → show it
+        if (data.action !== "add") {
+             // For general chat, display the response cleanly
+            const chatResponse = data.response || "I am sorry, I could not generate a chat response.";
+            aiOutput.innerText = "🤖 Assistant:\n" + chatResponse;
+            return;
+        }
+
+        // If AI successfully added a task
+        // Clean up the ISO string for display (remove Z and milliseconds)
+        const timeDisplay = data.reminder_time 
+            ? data.reminder_time.replace('Z', '').substring(0, 16) 
+            : 'None';
+            
+        aiOutput.innerText =
+            "✅ Task added:\n" +
+            "Task: " + data.task + "\n" +
+            "Time (UTC): " + timeDisplay;
+
+        // Refresh automatically to show the new task
+        setTimeout(() => {
+            window.location.reload();
+        }, 800);
+        
+    } catch (e) {
+        aiOutput.innerText = "❌ Network or unexpected error: " + e.message;
+    } finally {
+        askButton.disabled = false;
+        inputElement.disabled = false;
+        inputElement.value = '';
     }
 }
 </script>
