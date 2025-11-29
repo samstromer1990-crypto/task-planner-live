@@ -3,12 +3,14 @@ import os
 import urllib.parse
 import requests
 import smtplib
-import json
+import json # Added for structured AI response parsing
+import time # Added for exponential backoff in AI call
 import dateparser
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone, timedelta
 import logging
+from typing import Dict, Any, Optional # Added for type hinting
 
 from flask import Flask, redirect, url_for, session, render_template, request, jsonify
 from authlib.integrations.flask_client import OAuth
@@ -16,9 +18,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from collections import Counter
 
-# --- IMPORTING THE IMPROVED AI LOGIC ---
-# NOTE: This requires the file gemini_improvement.py to exist in the same directory.
-from gemini_improvement import ask_ai_gemini 
+# --- The following import is now REMOVED: from gemini_improvement import ask_ai_gemini 
+# All AI logic is now contained within this file.
+
 # ---------------------- Load config ----------------------
 load_dotenv()
 app = Flask(__name__, static_folder="static", template_folder="templates")
@@ -101,29 +103,121 @@ def check_task_ownership(record_id, user_email):
         app.logger.error(f"Error checking task ownership for {record_id}: {e}")
         return False, f"Server error: {e}"
 
-# ---------------------- AI helper (Gemini) ----------------------
-# google-generativeai client
+# ---------------------- AI helper (Gemini) - Logic Integrated ----------------------
+# Conditional import for Google Generative AI SDK components
 try:
     import google.generativeai as genai
+    from google.generativeai.types import Schema, Type
     HAS_GEMINI_SDK = True
-except Exception:
+    
+    # Define the necessary schema for the structured response
+    TASK_SCHEMA = Schema(
+        type=Type.OBJECT,
+        properties={
+            "action": Schema(
+                type=Type.STRING,
+                description="The primary action the user is requesting. Must be one of: 'add' (to create a new task), 'update' (to change an existing task or date, not yet fully supported), or 'general' (for conversation or non-task related queries)."
+            ),
+            "task": Schema(
+                type=Type.STRING,
+                description="The concise name or description of the task being added. If action is 'general', this field should contain the conversational reply."
+            ),
+            "date": Schema(
+                type=Type.STRING,
+                description="The natural language string for the date/time of the reminder (e.g., 'tomorrow at 3pm', 'next Tuesday'). This should NOT be parsed into ISO format here. Only include if action is 'add'."
+            ),
+            "priority": Schema(
+                type=Type.STRING,
+                description="The priority level (e.g., 'High', 'Low'). Optional."
+            )
+        },
+        required=["action", "task"]
+    )
+    
+    SYSTEM_INSTRUCTION = (
+        "You are an expert Task Management AI. Your only job is to process user input and return a JSON object based on the provided schema. "
+        "Strictly adhere to the following rules:\n"
+        "1. If the user is asking to create a task (e.g., 'remind me to...', 'add a task to...'), set 'action' to 'add', populate 'task' with the name, and extract the date/time into the 'date' field.\n"
+        "2. If the user is asking a general question (e.g., 'What is the weather?', 'How are you?'), set 'action' to 'general' and put a helpful, conversational response directly into the 'task' field. Do not use the 'date' or 'priority' fields in this case.\n"
+        "3. Always respond with a valid JSON object matching the provided schema. Do not add any text or markdown outside the JSON block."
+    )
+    
+except ImportError:
+    # Set placeholders if SDK is not available
+    genai = None
+    TASK_SCHEMA = None
+    SYSTEM_INSTRUCTION = None
     HAS_GEMINI_SDK = False
 
-# Configure Gemini key
+
+# Configure Gemini key if it exists
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY and HAS_GEMINI_SDK:
     try:
         genai.configure(api_key=GEMINI_API_KEY) 
     except Exception:
         GEMINI_API_KEY = None
+else:
+    GEMINI_API_KEY = None
+
+
+def ask_ai_structured(user_text: str, api_key: Optional[str], has_sdk: bool, logger: logging.Logger) -> Dict[str, Any]:
+    """
+    Calls the Gemini API to process user text and extract structured task data.
+    Implements retries using exponential backoff.
+    """
+    if not api_key:
+        return {"type": "error", "message": "Gemini API Key is not configured."}
+    if not has_sdk or not genai:
+        return {"type": "error", "message": "Google Generative AI SDK is not available. Please ensure it is installed."}
+    if not TASK_SCHEMA or not SYSTEM_INSTRUCTION:
+        return {"type": "error", "message": "AI configuration error (Missing Schema or System Instruction)."}
+
+    # Use the client directly from the configured SDK
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # Generate content using the new structured output method
+            response = model.generate_content(
+                contents=[user_text],
+                config={
+                    "system_instruction": SYSTEM_INSTRUCTION,
+                    "response_mime_type": "application/json",
+                    "response_schema": TASK_SCHEMA,
+                }
+            )
+            
+            # The structured output is in response.text (a JSON string)
+            if response and response.text:
+                try:
+                    result_json = json.loads(response.text)
+                    return {"type": "success", "result": result_json}
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse AI JSON response: {response.text[:200]}... Error: {e}")
+                    raise Exception("AI returned invalid JSON.")
+            
+            return {"type": "error", "message": "AI returned an empty response."}
+
+        except Exception as e:
+            logger.error(f"Gemini API call attempt {attempt+1}/{max_retries} failed: {e}")
+            if attempt < max_retries - 1:
+                # Exponential backoff
+                sleep_time = 2 ** attempt
+                time.sleep(sleep_time)
+            else:
+                return {"type": "error", "message": f"AI service failed after multiple retries. Error: {e}"}
+
+    return {"type": "error", "message": "An unknown error occurred with the AI service."}
 
 
 def ask_ai(user_text):
     """Wrapper for AI calls."""
     if not user_text:
         return {"type": "error", "message": "No input provided."}
-    # Pass necessary context to the helper function
-    return ask_ai_gemini(user_text, GEMINI_API_KEY, HAS_GEMINI_SDK, app.logger)
+    # Pass necessary context to the integrated function
+    return ask_ai_structured(user_text, GEMINI_API_KEY, HAS_GEMINI_SDK, app.logger)
 
 # ---------------------- Natural language date parser ----------------------
 def parse_natural_date(text):
