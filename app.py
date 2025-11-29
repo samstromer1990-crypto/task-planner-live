@@ -168,7 +168,8 @@ except AttributeError:
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY and HAS_GEMINI_SDK:
     try:
-        genai.configure("AIzaSyAY4Fi-6DmNIJc6WTGsmQVaiPZqF6m96Ak") 
+        # CORRECT: Using the environment variable GEMINI_API_KEY
+        genai.configure(api_key=GEMINI_API_KEY) 
     except Exception as e:
         app.logger.error(f"Gemini configuration failed: {e}")
         GEMINI_API_KEY = None
@@ -194,7 +195,7 @@ def ask_ai_structured(user_text: str, api_key: Optional[str], has_sdk: bool, log
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            # Fix 2: Wrap system_instruction and other generation parameters in the 'config' dictionary
+            # Wrap system_instruction and other generation parameters in the 'config' dictionary
             response = model.generate_content(
                 contents=[user_text],
                 config={
@@ -213,6 +214,7 @@ def ask_ai_structured(user_text: str, api_key: Optional[str], has_sdk: bool, log
                     return {"type": "success", "result": result_json}
                 except json.JSONDecodeError as e:
                     logger.error(f"Failed to parse AI JSON response: {response.text[:200]}... Error: {e}")
+                    # Re-raise to trigger retry
                     raise Exception("AI returned invalid JSON.")
             
             return {"type": "error", "message": "AI returned an empty response."}
@@ -526,9 +528,13 @@ def notify_due_tasks():
         try:
             r = requests.get(url, headers=at_headers(), params=params, timeout=15)
             r.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
-            records = r.json().get("records", [])
+            payload = r.json()
+            records = payload.get("records", [])
         except requests.exceptions.RequestException as e:
             app.logger.error(f"Airtable notify fetch error: {e}")
+            records = []
+        except json.JSONDecodeError:
+            app.logger.error(f"Airtable notify fetch: received non-JSON response: {r.text[:300]}")
             records = []
             
     for rec in records:
@@ -660,4 +666,3 @@ else:
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
-
