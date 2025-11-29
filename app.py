@@ -102,9 +102,9 @@ def check_task_ownership(record_id, user_email):
 # google-generativeai client
 try:
     import google.generativeai as genai
-    import google.generativeai.types as types
-    # FIX: Explicitly import Schema and Type from types for structured output to fix AttributeError
-    from google.generativeai.types import Schema, Type 
+    # FIX: Cleaned up imports to directly define Schema, Type, and GenerateContentConfig 
+    # This resolves the previous NameError by ensuring 'Schema' is in scope.
+    from google.generativeai.types import Schema, Type, GenerateContentConfig
     HAS_GEMINI_SDK = True
 except Exception:
     HAS_GEMINI_SDK = False
@@ -121,7 +121,6 @@ if GEMINI_API_KEY and HAS_GEMINI_SDK:
 SYSTEM_PROMPT = "You are an AI Task Planner Assistant. Convert the user message into structured data for task creation. Respond only with the JSON object defined by the schema."
 
 # Define the required JSON schema for the output
-# FIX: Use Schema and Type directly since they are explicitly imported
 TASK_SCHEMA = Schema(
     type=Type.OBJECT,
     properties={
@@ -149,7 +148,8 @@ def ask_ai_gemini(user_text):
         response = model.generate_content(
             user_text,
             system_instruction=SYSTEM_PROMPT,
-            config=types.GenerateContentConfig(
+            # FIX: Use GenerateContentConfig directly, as it is now imported explicitly.
+            config=GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=TASK_SCHEMA,
                 temperature=0.2,
