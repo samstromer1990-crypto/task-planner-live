@@ -168,7 +168,7 @@ except AttributeError:
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY and HAS_GEMINI_SDK:
     try:
-        genai.configure(api_key=GEMINI_API_KEY) 
+        genai.configure("AIzaSyAY4Fi-6DmNIJc6WTGsmQVaiPZqF6m96Ak") 
     except Exception as e:
         app.logger.error(f"Gemini configuration failed: {e}")
         GEMINI_API_KEY = None
@@ -660,3 +660,4 @@ else:
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
