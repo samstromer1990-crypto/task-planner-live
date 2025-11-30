@@ -256,11 +256,11 @@ function convertToIST(utcString) {
         const istDate = new Date(utcDate.getTime() + istOffset);
         
         // Format as DD-MM-YYYY HH:MM
-        const day = String(istDate.getUTCDate()).padStart(2, '0');
-        const month = String(istDate.getUTCMonth() + 1).padStart(2, '0');
-        const year = istDate.getUTCFullYear();
-        const hours = String(istDate.getUTCHours()).padStart(2, '0');
-        const minutes = String(istDate.getUTCMinutes()).padStart(2, '0');
+        const day = String(istDate.getDate()).padStart(2, '0');
+        const month = String(istDate.getMonth() + 1).padStart(2, '0');
+        const year = istDate.getFullYear();
+        const hours = String(istDate.getHours()).padStart(2, '0');
+        const minutes = String(istDate.getMinutes()).padStart(2, '0');
         
         return `${day}-${month}-${year} ${hours}:${minutes} IST`;
     } catch (e) {
@@ -356,3 +356,4 @@ document.addEventListener('DOMContentLoaded', loadCharts);
 
 </body>
 </html>
+
