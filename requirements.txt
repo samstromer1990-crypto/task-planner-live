@@ -10,4 +10,3 @@ dateparser
 google-auth-oauthlib
 airtable-python-wrapper  # CRITICAL: Required for Airtable functionality in app.py
 python-dateutil          # Required for dateutil.parser.isoparse in app.py
-
