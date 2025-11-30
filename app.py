@@ -465,7 +465,7 @@ def notify_due_tasks():
         
         if send_reminder_email(task_name, reminder_time, recipient_email):
             try:
-                now_utc = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+                now_utc = datetime.now(timezone.ist).isoformat().replace('+00:00', 'Z')
                 patch_payload = {"fields": {"Last Notified At": now_utc}}
                 patch_resp = requests.patch(f"{url}/{record_id}", json=patch_payload, headers=at_headers(json=True))
                 patch_resp.raise_for_status()
@@ -589,6 +589,7 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
 
 
 
