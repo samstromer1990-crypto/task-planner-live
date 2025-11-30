@@ -127,6 +127,7 @@ Convert the user message into JSON in EXACTLY this format (no extra text outside
   "extra": ""
 }
 
+If the user message is a command to create a new task or reminder, you MUST set the "action" field to "add".
 If the user message is not a task command, return action="general".
 """
 
@@ -579,3 +580,4 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
