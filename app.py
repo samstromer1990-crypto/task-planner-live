@@ -216,7 +216,7 @@ def ai_process():
     date_text = result.get("date")
 
     # If action is NOT "add" → return AI result to front-end
-    if action != "add":
+    if action not in ["add", "set_reminder"]:
         return jsonify(result)
 
     # Convert natural language date → datetime-local
@@ -580,4 +580,5 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
 
