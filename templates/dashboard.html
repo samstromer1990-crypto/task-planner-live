@@ -4,134 +4,36 @@
   <meta charset="UTF-8">
   <title>Your Task Planner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
-  <!-- Bootstrap -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  
-  <!-- Chart.js for graphs -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
   <style>
-    :root {
-      --bg: #fafafa;
-      --card: #ffffff;
-      --border: #e6e6e6;
-      --text: #333;
-      --muted: #666;
-      --primary: #0d6efd;
-    }
-
-    body {
-      background: var(--bg);
-      font-family: "Inter", "Segoe UI", Arial, sans-serif;
-      color: var(--text);
-    }
-
-    .nav-container {
-      background: #fff;
-      border-bottom: 1px solid var(--border);
-      padding: 12px 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
+    :root { --bg: #fafafa; --card: #ffffff; --border: #e6e6e6; --text: #333; --muted: #666; --primary: #0d6efd; }
+    body { background: var(--bg); font-family: "Inter", "Segoe UI", Arial, sans-serif; color: var(--text); }
+    .nav-container { background: #fff; border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
     .nav-title { font-size: 18px; font-weight: 600; }
     .user-info { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
     .user-info img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
-
-    .dashboard-layout {
-      display: flex;
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 28px 12px 60px;
-    }
-    .sidebar {
-      width: 280px;
-      flex-shrink: 0;
-      margin-right: 28px;
-    }
-    .main-content {
-      flex-grow: 1;
-      min-width: 0;
-    }
-
-    @media (max-width: 992px) {
-      .sidebar { display: none; }
-      .dashboard-layout {
-        padding: 28px 12px 60px;
-        display: block;
-      }
-    }
-
-    .task-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 14px 16px;
-      margin-bottom: 10px;
-      transition: border-color .2s ease, box-shadow .2s ease;
-    }
+    .dashboard-layout { display: flex; max-width: 1200px; margin: 0 auto; padding: 28px 12px 60px; }
+    .sidebar { width: 280px; flex-shrink: 0; margin-right: 28px; }
+    .main-content { flex-grow: 1; min-width: 0; }
+    @media (max-width: 992px) { .sidebar { display: none; } .dashboard-layout { display: block; } }
+    .task-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; transition: border-color .2s ease, box-shadow .2s ease; }
     .task-card:hover { border-color: #d5d5d5; box-shadow: 0 2px 10px rgba(0,0,0,.04); }
     .task-title { font-weight: 600; }
     .task-muted { color: var(--muted); font-size: 13px; }
     .completed { opacity: .55; text-decoration: line-through; }
-    .btn-primary-custom {
-      background: var(--primary);
-      border: 1px solid var(--primary);
-      color: #fff;
-    }
+    .btn-primary-custom { background: var(--primary); border: 1px solid var(--primary); color: #fff; }
     .btn-primary-custom:hover { background: #0048c6; border-color: #0048c6; }
     .dtl { max-width: 210px; }
     .card { border: 1px solid var(--border); border-radius: 8px; background: #fff; }
-
-    .calendar-widget {
-        padding: 16px;
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        margin-bottom: 20px;
-    }
-    .calendar-header {
-        font-weight: 600;
-        font-size: 16px;
-        margin-bottom: 10px;
-        color: var(--text);
-        text-align: center;
-    }
-    .calendar-grid {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
-        text-align: center;
-        font-size: 12px;
-    }
-    .calendar-day-header {
-        color: var(--muted);
-        padding-bottom: 4px;
-        font-weight: 600;
-    }
-    .calendar-day {
-        padding: 4px 0;
-        cursor: pointer;
-        border-radius: 4px;
-        transition: background-color 0.2s;
-    }
-    .calendar-day:hover {
-        background-color: var(--bg);
-    }
-    .calendar-day.today {
-        background-color: var(--primary);
-        color: #fff;
-        font-weight: 700;
-        box-shadow: 0 2px 5px rgba(13, 108, 253, 0.4);
-    }
-    
-    /* Chart canvas sizing */
-    canvas {
-        max-height: 250px;
-    }
+    .calendar-widget { padding: 16px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 20px; }
+    .calendar-header { font-weight: 600; font-size: 16px; margin-bottom: 10px; color: var(--text); text-align: center; }
+    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 12px; }
+    .calendar-day-header { color: var(--muted); padding-bottom: 4px; font-weight: 600; }
+    .calendar-day { padding: 4px 0; cursor: pointer; border-radius: 4px; transition: background-color 0.2s; }
+    .calendar-day:hover { background-color: var(--bg); }
+    .calendar-day.today { background-color: var(--primary); color: #fff; font-weight: 700; box-shadow: 0 2px 5px rgba(13, 108, 253, 0.4); }
+    canvas { max-height: 250px; }
   </style>
 </head>
 <body>
@@ -151,82 +53,26 @@
   <!-- MAIN DASHBOARD LAYOUT -->
   <div class="dashboard-layout">
     
-    <!-- SIDEBAR (Calendar & Charts) -->
+    <!-- SIDEBAR -->
     <div class="sidebar">
         
         <!-- Calendar Widget -->
         <div class="calendar-widget">
             <div class="calendar-header">November 2025</div>
             <div class="calendar-grid">
-                <div class="calendar-day-header">Mo</div>
-                <div class="calendar-day-header">Tu</div>
-                <div class="calendar-day-header">We</div>
-                <div class="calendar-day-header">Th</div>
-                <div class="calendar-day-header">Fr</div>
-                <div class="calendar-day-header">Sa</div>
-                <div class="calendar-day-header" style="color: #dc3545;">Su</div>
-                <!-- November 2025 starts on Saturday (grid-column: 6) -->
-                <div class="calendar-day" style="grid-column: 6;">1</div>
-                <div class="calendar-day" style="color: #dc3545;">2</div>
-                <div class="calendar-day">3</div>
-                <div class="calendar-day">4</div>
-                <div class="calendar-day">5</div>
-                <div class="calendar-day">6</div>
-                <div class="calendar-day">7</div>
-                <div class="calendar-day">8</div>
-                <div class="calendar-day" style="color: #dc3545;">9</div>
-                <div class="calendar-day">10</div>
-                <div class="calendar-day">11</div>
-                <div class="calendar-day">12</div>
-                <div class="calendar-day">13</div>
-                <div class="calendar-day">14</div>
-                <div class="calendar-day">15</div>
-                <div class="calendar-day" style="color: #dc3545;">16</div>
-                <div class="calendar-day">17</div>
-                <div class="calendar-day">18</div>
-                <div class="calendar-day">19</div>
-                <div class="calendar-day">20</div>
-                <div class="calendar-day">21</div>
-                <div class="calendar-day">22</div>
-                <div class="calendar-day" style="color: #dc3545;">23</div>
-                <div class="calendar-day">24</div>
-                <div class="calendar-day">25</div>
-                <div class="calendar-day">26</div>
-                <div class="calendar-day">27</div>
-                <div class="calendar-day">28</div>
-                <div class="calendar-day today">29</div>
-                <div class="calendar-day" style="color: #dc3545;">30</div>
+                <div class="calendar-day-header">Mo</div><div class="calendar-day-header">Tu</div><div class="calendar-day-header">We</div><div class="calendar-day-header">Th</div><div class="calendar-day-header">Fr</div><div class="calendar-day-header">Sa</div><div class="calendar-day-header" style="color: #dc3545;">Su</div>
+                <div class="calendar-day" style="grid-column: 6;">1</div><div class="calendar-day" style="color: #dc3545;">2</div><div class="calendar-day">3</div><div class="calendar-day">4</div><div class="calendar-day">5</div><div class="calendar-day">6</div><div class="calendar-day">7</div><div class="calendar-day">8</div><div class="calendar-day" style="color: #dc3545;">9</div><div class="calendar-day">10</div><div class="calendar-day">11</div><div class="calendar-day">12</div><div class="calendar-day">13</div><div class="calendar-day">14</div><div class="calendar-day">15</div><div class="calendar-day" style="color: #dc3545;">16</div><div class="calendar-day">17</div><div class="calendar-day">18</div><div class="calendar-day">19</div><div class="calendar-day">20</div><div class="calendar-day">21</div><div class="calendar-day">22</div><div class="calendar-day" style="color: #dc3545;">23</div><div class="calendar-day">24</div><div class="calendar-day">25</div><div class="calendar-day">26</div><div class="calendar-day">27</div><div class="calendar-day">28</div><div class="calendar-day today">29</div><div class="calendar-day" style="color: #dc3545;">30</div>
             </div>
         </div>
         
-        <!-- Quick Stats & CHARTS (Enhanced) -->
+        <!-- Quick Stats & PIE CHART -->
         <div class="card p-3">
             <h6 class="mb-3">📊 Task Analytics</h6>
-            
-            <!-- Chart Tabs -->
-            <ul class="nav nav-tabs nav-sm mb-3" id="chartTab" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="category-tab" data-bs-toggle="tab" data-bs-target="#category-chart" type="button">Categories</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="timeline-tab" data-bs-toggle="tab" data-bs-target="#timeline-chart" type="button">Timeline</button>
-                </li>
-            </ul>
-            
-            <div class="tab-content" id="chartTabContent">
-                <!-- Category Chart -->
-                <div class="tab-pane fade show active" id="category-chart" role="tabpanel">
-                    <canvas id="categoryChart" width="250" height="200"></canvas>
-                    <div class="mt-2 text-muted small">
-                        <div>Total Tasks: <span class="fw-bold" id="totalTasks">-</span></div>
-                        <div>Completed: <span class="text-success fw-bold" id="completedTasks">-</span></div>
-                    </div>
-                </div>
-                
-                <!-- Timeline Chart -->
-                <div class="tab-pane fade" id="timeline-chart" role="tabpanel">
-                    <canvas id="timelineChart" width="250" height="200"></canvas>
-                </div>
+            <canvas id="completionPieChart" width="250" height="250"></canvas>
+            <div class="mt-3 text-center">
+                <div class="text-muted small">Total Tasks: <span class="fw-bold" id="totalTasks">-</span></div>
+                <div class="text-muted small">Pending: <span class="text-danger fw-bold" id="pendingTasks">-</span></div>
+                <div class="text-muted small">Completed: <span class="text-success fw-bold" id="completedTasks">-</span></div>
             </div>
         </div>
 
@@ -235,7 +81,7 @@
     <!-- MAIN CONTENT -->
     <div class="main-content">
       
-      <!-- Display Flash Messages -->
+      <!-- Flash Messages -->
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
           {% for category, message in messages %}
@@ -261,7 +107,15 @@
         <div class="row g-2 align-items-center">
           <div class="col-md-6">
             <div class="task-title">{{ task.task }}</div>
-            <div class="task-muted">{% if task.completed %}✔ Completed{% else %}⏳ Pending{% endif %}</div>
+            <div class="task-muted">
+              {% if task.completed %}✔ Completed{% else %}⏳ Pending{% endif %}
+              {% if task.category %} • {{ task.category }}{% endif %}
+            </div>
+
+            <!-- FIXED: Better date formatting -->
+            <div class="task-muted small mt-1">
+              Due: {{ task.raw_reminder_time | replace('Z', '') | truncate(16, True, '') if task.raw_reminder_time else 'No reminder' }}
+            </div>
 
             <form action="/update-time/{{ task.id }}" method="POST" class="d-flex align-items-center gap-2 mt-2">
               <input type="datetime-local" name="reminder_time" 
@@ -271,15 +125,13 @@
             </form>
           </div>
 
-          <!-- Delete and Complete Buttons -->
+          <!-- Action Buttons -->
           <div class="col-md-6 text-md-end d-flex justify-content-end align-items-center gap-2">
-            
             <a href="/delete/{{ task.id }}" 
                class="btn btn-outline-danger btn-sm" 
-               onclick="return confirm('Are you sure you want to delete the task: {{ task.task | e }}?');">
+               onclick="return confirm('Delete task: {{ task.task | e }}?');">
                Delete
             </a>
-
             {% if not task.completed %}
             <a href="/complete/{{ task.id }}" class="btn btn-primary-custom btn-sm">Mark Complete</a>
             {% else %}
@@ -302,18 +154,22 @@
               <h5 class="modal-title">Add Task</h5>
               <button class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-
             <form action="/add-task" method="POST">
               <div class="modal-body">
                 <label class="form-label">Task Name</label>
                 <input type="text" name="task_name" class="form-control mb-3" required>
+                
+                <label class="form-label">Category</label>
+                <select name="category" class="form-control mb-3">
+                  <option value="Personal" selected>Personal</option>
+                  <option value="Work">Work</option>
+                  <option value="Study">Study</option>
+                  <option value="Uncategorized">Uncategorized</option>
+                </select>
 
                 <label class="form-label">Reminder Time</label>
-                <input type="datetime-local" name="reminder_time" class="form-control mb-3">
-
-                <!-- Category will be added by JavaScript -->
+                <input type="datetime-local" name="reminder_time" class="form-control">
               </div>
-
               <div class="modal-footer">
                 <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button class="btn btn-primary-custom">Add Task</button>
@@ -327,17 +183,14 @@
       <div class="card p-3 mt-4">
         <h5>AI Assistant 🤖</h5>
         <p class="text-muted">Ask anything. AI will help extract tasks or chat.</p>
-
         <div class="input-group mb-2">
           <input id="ai_input" class="form-control" placeholder="e.g., Remind me to study physics tomorrow at 4 PM">
           <button class="btn btn-primary-custom" onclick="sendToAI()">Ask</button>
         </div>
-
         <pre id="ai_output" class="p-2 bg-light" style="min-height:100px; white-space: pre-wrap;"></pre>
       </div>
 
     </div> <!-- End Main Content -->
-
   </div> <!-- End Dashboard Layout -->
 
   <!-- Bootstrap JS -->
@@ -388,9 +241,9 @@ async function sendToAI() {
 }
 </script>
 
-  <!-- Chart Rendering Script -->
+  <!-- PIE CHART Script -->
   <script>
-// Fetch and render charts
+// Load pie chart showing completion percentage
 async function loadCharts() {
     try {
         const res = await fetch('/stats.json');
@@ -401,74 +254,57 @@ async function loadCharts() {
             return;
         }
 
-        // Update summary counts
-        document.getElementById('totalTasks').textContent = data.total_tasks || 0;
-        const completed = data.completed_by_category?.reduce((a, b) => a + b, 0) || 0;
-        document.getElementById('completedTasks').textContent = completed;
+        // Calculate totals
+        const totalTasks = data.total_tasks || 0;
+        const completedTasks = data.completed_by_category?.reduce((a, b) => a + b, 0) || 0;
+        const pendingTasks = totalTasks - completedTasks;
 
-        // Destroy existing charts if they exist
-        if (window.categoryChartInstance) window.categoryChartInstance.destroy();
-        if (window.timelineChartInstance) window.timelineChartInstance.destroy();
+        // Update summary
+        document.getElementById('totalTasks').textContent = totalTasks;
+        document.getElementById('completedTasks').textContent = completedTasks;
+        document.getElementById('pendingTasks').textContent = pendingTasks;
 
-        // Category Bar Chart
-        const categoryCtx = document.getElementById('categoryChart').getContext('2d');
-        window.categoryChartInstance = new Chart(categoryCtx, {
-            type: 'bar',
+        // Destroy existing chart if it exists
+        if (window.completionPieChartInstance) window.completionPieChartInstance.destroy();
+
+        // Pie Chart for Completion Percentage
+        const pieCtx = document.getElementById('completionPieChart').getContext('2d');
+        window.completionPieChartInstance = new Chart(pieCtx, {
+            type: 'pie',
             data: {
-                labels: data.categories,
-                datasets: [
-                    {
-                        label: 'Completed',
-                        data: data.completed_by_category,
-                        backgroundColor: 'rgba(40, 167, 69, 0.8)',
-                        borderColor: 'rgba(40, 167, 69, 1)',
-                        borderWidth: 1
-                    },
-                    {
-                        label: 'Total',
-                        data: data.total_by_category,
-                        backgroundColor: 'rgba(108, 117, 125, 0.6)',
-                        borderColor: 'rgba(108, 117, 125, 1)',
-                        borderWidth: 1
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: { callbacks: { label: function(ctx) { return ctx.dataset.label + ': ' + ctx.parsed.y; } } }
-                },
-                scales: {
-                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
-                }
-            }
-        });
-
-        // Timeline Line Chart
-        const timelineCtx = document.getElementById('timelineChart').getContext('2d');
-        window.timelineChartInstance = new Chart(timelineCtx, {
-            type: 'line',
-            data: {
-                labels: data.timeline_dates.map(d => new Date(d).toLocaleDateString()),
+                labels: ['Completed', 'Pending'],
                 datasets: [{
-                    label: 'Tasks Completed',
-                    data: data.timeline_completed,
-                    borderColor: 'rgba(13, 108, 253, 1)',
-                    backgroundColor: 'rgba(13, 108, 253, 0.1)',
-                    tension: 0.3,
-                    fill: true,
-                    pointRadius: 3,
-                    pointHoverRadius: 5
+                    data: [completedTasks, pendingTasks],
+                    backgroundColor: [
+                        'rgba(40, 167, 69, 0.8)',
+                        'rgba(220, 53, 69, 0.8)'
+                    ],
+                    borderColor: [
+                        'rgba(40, 167, 69, 1)',
+                        'rgba(220, 53, 69, 1)'
+                    ],
+                    borderWidth: 1
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { padding: 15, font: { size: 12 } }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
                 }
             }
         });
@@ -480,21 +316,6 @@ async function loadCharts() {
 
 // Load charts on page load
 document.addEventListener('DOMContentLoaded', loadCharts);
-
-// Add category dropdown to "Add Task" modal
-document.addEventListener('DOMContentLoaded', function() {
-    const modalBody = document.querySelector('#addTaskModal .modal-body');
-    const categoryHTML = `
-        <label class="form-label">Category</label>
-        <select name="category" class="form-control mb-3">
-            <option value="Personal" selected>Personal</option>
-            <option value="Work">Work</option>
-            <option value="Study">Study</option>
-            <option value="Uncategorized">Uncategorized</option>
-        </select>
-    `;
-    modalBody.insertAdjacentHTML('beforeend', categoryHTML);
-});
 </script>
 
 </body>
