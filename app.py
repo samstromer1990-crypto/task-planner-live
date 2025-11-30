@@ -18,7 +18,7 @@ from collections import Counter
 
 # ---------------------- Load config ----------------------
 load_dotenv()
-app = Flask(_name_, static_folder="static", template_folder="templates")
+app = Flask(__name__, static_folder="static", template_folder="templates")
 app.logger.setLevel(logging.INFO)
 
 # Secrets & config from environment
@@ -589,3 +589,4 @@ scheduler.start()
 # ---------------------- Start ----------------------
 if _name_ == "_main_":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
