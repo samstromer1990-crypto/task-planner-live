@@ -19,7 +19,7 @@ from collections import Counter
 # ---------------------- Load config ----------------------
 load_dotenv()
 app = Flask(__name__, static_folder="static", template_folder="templates")
-app.logger.setLevel(logging.INFO) # Set default logging level
+app.logger.setLevel(logging.INFO)
 
 # Secrets & config from environment
 app.secret_key = os.getenv("SECRET_KEY", os.urandom(24).hex())
@@ -29,13 +29,13 @@ AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY")
 AIRTABLE_BASE_ID = os.getenv("AIRTABLE_BASE_ID")
 AIRTABLE_TABLE_NAME = os.getenv("AIRTABLE_TABLE_NAME", "Tasks")
 
-# Email (SMTP)
+# Email (SMTP) - FIXED: Support both old and new env var names
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER")
-SMTP_PASS = os.getenv("SMTP_PASS")
-EMAIL_FROM = os.getenv("EMAIL_FROM", SMTP_USER)
-EMAIL_TO = os.getenv("EMAIL_TO") # Note: This should ideally be read from Airtable per task
+SMTP_USER = os.getenv("SMTP_USER") or os.getenv("EMAIL_USER")
+SMTP_PASS = os.getenv("SMTP_PASS") or os.getenv("EMAIL_PASS")
+EMAIL_FROM = os.getenv("EMAIL_FROM") or SMTP_USER or os.getenv("EMAIL_USER")
+EMAIL_TO = os.getenv("EMAIL_TO")
 
 # Google OAuth (Authlib)
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
@@ -58,7 +58,7 @@ else:
 def airtable_url():
     if not AIRTABLE_BASE_ID or not AIRTABLE_TABLE_NAME:
         return None
-    # Using quote_plus for safety, though typically just table name should be safe
+    # FIXED: Removed the space after /v0/
     return f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{urllib.parse.quote_plus(AIRTABLE_TABLE_NAME)}"
 
 def at_headers(json=False):
@@ -70,7 +70,6 @@ def at_headers(json=False):
     return h
 
 # ---------------------- Security Helper (Task Ownership) ----------------------
-
 def check_task_ownership(record_id, user_email):
     """Fetches a task record and verifies that the provided email matches the record's Email field."""
     url = airtable_url()
@@ -78,7 +77,6 @@ def check_task_ownership(record_id, user_email):
         return False, "Airtable not configured"
     
     try:
-        # 1. Fetch the specific record
         resp = requests.get(f"{url}/{record_id}", headers=at_headers(), timeout=5)
         
         if resp.status_code != 200:
@@ -88,7 +86,6 @@ def check_task_ownership(record_id, user_email):
         record = resp.json()
         task_owner_email = record.get("fields", {}).get("Email")
 
-        # 2. Check ownership
         if task_owner_email and task_owner_email == user_email:
             return True, None
         else:
@@ -100,14 +97,12 @@ def check_task_ownership(record_id, user_email):
         return False, f"Server error: {e}"
 
 # ---------------------- AI helper (Gemini) ----------------------
-# google-generativeai client
 try:
     import google.generativeai as genai
     HAS_GEMINI_SDK = True
 except Exception:
     HAS_GEMINI_SDK = False
 
-# Configure Gemini key
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY and HAS_GEMINI_SDK:
     try:
@@ -115,7 +110,7 @@ if GEMINI_API_KEY and HAS_GEMINI_SDK:
     except Exception:
         GEMINI_API_KEY = None
 
-# System prompt — enforce exact JSON output
+# FIXED: Enhanced system prompt to extract category
 SYSTEM_PROMPT = """
 You are an AI Task Planner Assistant.
 Convert the user message into JSON in EXACTLY this format (no extra text outside the JSON):
@@ -124,16 +119,16 @@ Convert the user message into JSON in EXACTLY this format (no extra text outside
   "action": "",
   "task": "",
   "date": "",
+  "category": "",
   "extra": ""
 }
 
 If the user message is a command to create a new task or reminder, you MUST set the "action" field to "add".
+Try to categorize the task into: Work, Study, Personal, or Uncategorized based on the content.
 If the user message is not a task command, return action="general".
 """
 
 def ask_ai_gemini(user_text):
-    """Call Gemini (gemini-2.0-flash). Returns dict: either {"type":"success","result": parsed_json}
-    or {"type":"error","message": "...", "raw": "..."}."""
     prompt = f"{SYSTEM_PROMPT}\nUser: {user_text}\nAssistant:"
     if not GEMINI_API_KEY or not HAS_GEMINI_SDK:
         return {"type": "error", "message": "Gemini not configured on server."}
@@ -153,7 +148,6 @@ def ask_ai_gemini(user_text):
         app.logger.error(f"Gemini request failed: {e}")
         return {"type": "error", "message": f"Gemini request failed: {e}", "raw": str(e)}
 
-    # Extract JSON substring and parse (note: using JSON schema is preferred but kept simple here)
     try:
         start = txt.find("{")
         end = txt.rfind("}") + 1
@@ -167,26 +161,21 @@ def ask_ai_gemini(user_text):
         return {"type": "error", "message": "Failed to parse Gemini JSON", "raw": txt}
 
 def ask_ai(user_text):
-    """Wrapper for AI calls."""
     if not user_text:
         return {"type": "error", "message": "No input provided."}
     return ask_ai_gemini(user_text)
 
 # ---------------------- Natural language date parser ----------------------
 def parse_natural_date(text):
-    """Parses natural language date and returns an ISO 8601 string for Airtable (UTC)."""
     if not text:
         return None
-    # We parse relative to UTC and ensure it is timezone aware for Airtable compatibility
     dt = dateparser.parse(
         text,
         settings={"TIMEZONE": "UTC", "RETURN_AS_TIMEZONE_AWARE": True, "PREFER_DATES_FROM": "future"}
     )
     if not dt:
         return None
-    # Return ISO format string
     return dt.isoformat().replace('+00:00', 'Z')
-
 
 # ---------------------- AI processing endpoint ----------------------
 @app.route("/ai-process", methods=["POST"])
@@ -201,28 +190,20 @@ def ai_process():
     if not user_input:
         return jsonify({"type": "error", "message": "No text provided"}), 400
 
-    # 1. Ask Gemini
     ai_reply = ask_ai(user_input)
-
-    # If Gemini failed → return error
     if ai_reply.get("type") == "error":
         return jsonify(ai_reply)
 
-    # AI result fields
     result = ai_reply.get("result", {})
-
     action = result.get("action") 
     task_name = result.get("task")
     date_text = result.get("date")
+    category = result.get("category", "Uncategorized")  # FIXED: Extract category
 
-    # If action is NOT "add" → return AI result to front-end
     if action not in ["add", "set_reminder"]:
         return jsonify(result)
 
-    # Convert natural language date → datetime-local
     reminder_time = parse_natural_date(date_text) if date_text else None
-
-    # 4. Save to Airtable
     url = airtable_url()
     if not url:
         return jsonify({"type": "error", "message": "Airtable not configured"})
@@ -230,14 +211,14 @@ def ai_process():
     fields = {
         "Task Name": task_name,
         "Completed": False,
-        "Email": user_email # Ensure email is saved with the task
+        "Email": user_email,
+        "Category": category  # FIXED: Save category
     }
     
     if reminder_time:
-       fields["Reminder Local"] = reminder_time # Stored as UTC time
+       fields["Reminder Local"] = reminder_time
     
     payload = { "fields": fields }
-    
     
     try:
         resp = requests.post(url, json=payload, headers=at_headers(json=True), timeout=15)
@@ -252,14 +233,14 @@ def ai_process():
         app.logger.error(f"Airtable POST exception (ai_process): {e}")
         return jsonify({"type": "error", "message": f"Airtable error: {e}"})
 
-    # 5. Return success response to front-end
     return jsonify({
         "type": "success",
         "action": "add",
         "task": task_name,
-        "reminder_time": reminder_time
+        "reminder_time": reminder_time,
+        "category": category
     })
-    
+
 # ---------------------- Landing & Auth ----------------------
 @app.route("/")
 def index():
@@ -305,14 +286,12 @@ def dashboard():
     user_email = session["user"]["email"]
 
     if url:
-        # 🟢 SECURITY FIX: Filter records by the logged-in user's email
         formula = f"{{Email}} = '{user_email}'"
         params = {"filterByFormula": formula} 
 
         try:
             r = requests.get(url, headers=at_headers(), params=params, timeout=15)
             try:
-                # Airtable returns records in UTC.
                 records = r.json().get("records", [])
             except Exception as e:
                 app.logger.error(f"Airtable fetch error (dashboard): {r.status_code} - {r.text[:300]} - {e}")
@@ -323,15 +302,14 @@ def dashboard():
     else:
         app.logger.error("Airtable config missing (BASE_ID or TABLE_NAME)")
 
-
     tasks = []
     for r in records:
         tasks.append({
             "id": r.get("id"),
             "task": r.get("fields", {}).get("Task Name", ""),
             "completed": r.get("fields", {}).get("Completed", False),
-            # raw_reminder_time is now the UTC ISO string, which the front-end should convert
             "raw_reminder_time": r.get("fields", {}).get("Reminder Local", ""),
+            "category": r.get("fields", {}).get("Category", "Uncategorized"),  # FIXED: Add category
         })
 
     return render_template("dashboard.html", user=session.get("user"), tasks=tasks)
@@ -344,13 +322,22 @@ def add_task():
         
     task_name = request.form.get("task_name")
     reminder_time = request.form.get("reminder_time")
+    category = request.form.get("category", "Personal")  # FIXED: Accept category
     user_email = session['user'].get("email")
     
     url = airtable_url()
     if not url:
         return "Airtable not configured", 500
 
-    payload = {"fields": {"Task Name": task_name, "Completed": False, "Reminder Local": reminder_time, "Email": user_email}}
+    payload = {
+        "fields": {
+            "Task Name": task_name,
+            "Completed": False,
+            "Reminder Local": reminder_time,
+            "Email": user_email,
+            "Category": category  # FIXED: Save category
+        }
+    }
     
     try:
         resp = requests.post(url, json=payload, headers=at_headers(json=True), timeout=15)
@@ -369,7 +356,6 @@ def complete_task(record_id):
     if "user" not in session:
         return "Not logged in", 403
         
-    # 🟢 SECURITY FIX: Verify task ownership
     is_owner, error_msg = check_task_ownership(record_id, session["user"]["email"])
     if not is_owner:
         return error_msg or "Unauthorized", 403
@@ -391,7 +377,6 @@ def update_time(record_id):
     if "user" not in session:
         return "Not logged in", 403
 
-    # 🟢 SECURITY FIX: Verify task ownership
     is_owner, error_msg = check_task_ownership(record_id, session["user"]["email"])
     if not is_owner:
         return error_msg or "Unauthorized", 403
@@ -401,7 +386,6 @@ def update_time(record_id):
     if not url:
         return "Airtable not configured", 500
         
-    # Note: Reminder Local should be in ISO format (e.g., from datepicker)
     resp = requests.patch(f"{url}/{record_id}", json={"fields": {"Reminder Local": new_time}}, headers=at_headers(json=True), timeout=15)
     
     if resp.status_code not in (200, 201):
@@ -412,7 +396,11 @@ def update_time(record_id):
 
 # ---------------------- Email reminder system ----------------------
 def send_reminder_email(task_name, reminder_time, recipient_email):
-    # This function is now more flexible to handle the actual recipient
+    # FIXED: Added fallback for missing email in task record
+    if not recipient_email:
+        recipient_email = EMAIL_TO
+        app.logger.warning(f"No email in task '{task_name}', using default: {recipient_email}")
+    
     msg = MIMEMultipart()
     msg["From"] = EMAIL_FROM
     msg["To"] = recipient_email
@@ -424,17 +412,22 @@ def send_reminder_email(task_name, reminder_time, recipient_email):
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
             server.send_message(msg)
+        app.logger.info(f"✅ Email sent to {recipient_email} for task: {task_name}")
         return True
     except Exception as e:
         app.logger.error(f"SMTP send error to {recipient_email}: {e}")
         return False
 
+# FIXED: Added comprehensive logging and error handling
 def notify_due_tasks():
     """Checks Airtable for due tasks that haven't been notified in the last 1 minute."""
+    app.logger.info("🔔 Running due task notification check...")
     
-    # This formula looks for uncompleted tasks where the reminder time is in the past,
-    # and either 'Last Notified At' is blank or it was more than 1 minute ago.
-    # Note: Airtable formulas are executed server-side, independent of the user session.
+    url = airtable_url()
+    if not url:
+        app.logger.error("❌ Airtable URL not configured")
+        return
+    
     formula = """
     AND(
       {Completed}=0,
@@ -446,32 +439,41 @@ def notify_due_tasks():
     )
     """
     params = {"filterByFormula": formula.replace("\n", "")}
-    url = airtable_url()
     records = []
     
-    if url:
-        try:
-            r = requests.get(url, headers=at_headers(), params=params, timeout=15)
-            records = r.json().get("records", [])
-        except Exception as e:
-            app.logger.error(f"Airtable notify fetch error: {e}")
-            records = []
+    try:
+        r = requests.get(url, headers=at_headers(), params=params, timeout=15)
+        r.raise_for_status()
+        records = r.json().get("records", [])
+        app.logger.info(f"📋 Found {len(records)} potential tasks to notify")
+    except Exception as e:
+        app.logger.error(f"❌ Airtable fetch error: {e}")
+        return
             
     for rec in records:
-        task_name = rec.get("fields", {}).get("Task Name", "Task")
-        reminder_time = rec.get("fields", {}).get("Reminder Local", "")
-        recipient_email = rec.get("fields", {}).get("Email") # Get the task owner's email
+        fields = rec.get("fields", {})
+        task_name = fields.get("Task Name", "Task")
+        reminder_time = fields.get("Reminder Local", "")
+        recipient_email = fields.get("Email", "") or EMAIL_TO  # FIXED: Added fallback
         record_id = rec['id']
 
-        if recipient_email and send_reminder_email(task_name, reminder_time, recipient_email):
-            # Patch Airtable to update Last Notified At field (in UTC)
+        if not recipient_email:
+            app.logger.warning(f"⚠️ No email for task '{task_name}', skipping")
+            continue
+
+        app.logger.info(f"📧 Sending reminder for: {task_name} to {recipient_email}")
+        
+        if send_reminder_email(task_name, reminder_time, recipient_email):
             try:
-                # Use timezone.utc for ISO formatting for Airtable
                 now_utc = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
                 patch_payload = {"fields": {"Last Notified At": now_utc}}
-                requests.patch(f"{url}/{record_id}", json=patch_payload, headers=at_headers(json=True))
+                patch_resp = requests.patch(f"{url}/{record_id}", json=patch_payload, headers=at_headers(json=True))
+                patch_resp.raise_for_status()
+                app.logger.info(f"✅ Updated Last Notified At for {record_id}")
             except Exception as e:
-                app.logger.error(f"Airtable patch after notify error for {record_id}: {e}")
+                app.logger.error(f"❌ Failed to update notification timestamp: {e}")
+        else:
+            app.logger.error(f"❌ Failed to send email for task: {task_name}")
 
 @app.route("/test-reminder")
 def test_reminder():
@@ -479,11 +481,9 @@ def test_reminder():
     return "Reminder check done ✅. Check server logs for details."
 
 # ---------------------- Stats for charts ----------------------
-
 def fetch_all_records(email_filter=None):
     """
     Fetches all records from Airtable, optionally filtered by user email.
-    🟢 SECURITY FIX: Added email_filter parameter for data segregation.
     """
     url = airtable_url()
     headers = at_headers()
@@ -495,7 +495,6 @@ def fetch_all_records(email_filter=None):
         return records
 
     if email_filter:
-        # Apply email filter
         params["filterByFormula"] = f"{{Email}} = '{email_filter}'"
         
     while True:
@@ -514,17 +513,20 @@ def fetch_all_records(email_filter=None):
         
     return records
 
+# FIXED: Enhanced stats with better error handling and logging
 @app.route("/stats.json")
 def stats_json():
     if "user" not in session:
         return jsonify({"error": "Authentication required for stats"}), 403
         
     user_email = session["user"]["email"]
-    # 🟢 SECURITY FIX: Fetch records only for the current user
     recs = fetch_all_records(email_filter=user_email)
     
-    # ... rest of the stats logic (no change needed here) ...
-    categories = ["Work", "Study", "Personal"]
+    app.logger.info(f"📊 Generating stats for {len(recs)} records")
+    
+    # FIXED: Define categories - make sure these match your Airtable single-select options
+    categories = ["Work", "Study", "Personal", "Uncategorized"]
+    
     def f(r, name, default=None):
         return r.get("fields", {}).get(name, default)
         
@@ -533,10 +535,11 @@ def stats_json():
         if not dt:
             return None
         try:
-            # Assuming 'Reminder Local' is an ISO UTC string (e.g. 2025-11-29T10:00:00.000Z)
-            # We only care about the date part for aggregation
-            return datetime.fromisoformat(dt.replace("Z", "+00:00")).date().isoformat()
-        except:
+            # FIXED: Handle both Z and +00:00 formats
+            cleaned_dt = dt.replace("Z", "+00:00")
+            return datetime.fromisoformat(cleaned_dt).date().isoformat()
+        except Exception as e:
+            app.logger.warning(f"Failed to parse date '{dt}': {e}")
             return None
             
     total_tasks = len(recs)
@@ -545,8 +548,11 @@ def stats_json():
     completed_over_time = Counter()
     
     for r in recs:
-        # Note: Your Airtable table must have a 'Category' field for this part to work fully.
+        # FIXED: Get category with fallback
         cat = f(r, "Category") or "Uncategorized"
+        if cat not in categories:
+            cat = "Uncategorized"
+            
         done = bool(f(r, "Completed", False))
         
         total_by_category[cat] += 1
@@ -557,28 +563,32 @@ def stats_json():
             if d:
                 completed_over_time[d] += 1
                 
+    # FIXED: Ensure all categories are included even if zero
     completed_cat_counts = [completed_by_category.get(c, 0) for c in categories]
     total_cat_counts = [total_by_category.get(c, 0) for c in categories]
     timeline_dates = sorted(completed_over_time.keys())
     timeline_values = [completed_over_time[d] for d in timeline_dates]
     
-    return jsonify({
+    stats_data = {
         "total_tasks": total_tasks,
         "categories": categories,
         "completed_by_category": completed_cat_counts,
         "total_by_category": total_cat_counts,
         "timeline_dates": timeline_dates,
         "timeline_completed": timeline_values,
-    })
+    }
+    
+    app.logger.info(f"📈 Stats generated: {stats_data}")
+    return jsonify(stats_data)
 
 # ---------------------- Scheduler ----------------------
 scheduler = BackgroundScheduler(timezone="UTC")
-# Note: notify_due_tasks will now send an email to the 'Email' field stored in the task record.
 scheduler.add_job(notify_due_tasks, IntervalTrigger(minutes=5), id="notify_due_tasks", replace_existing=True)
 scheduler.start()
 
 # ---------------------- Start ----------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
 
 
