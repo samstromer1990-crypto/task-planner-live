@@ -1,485 +1,372 @@
-from dotenv import load_dotenv
-import os
-import json
-import logging
-from datetime import datetime, timedelta, timezone
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Your Task Planner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
-# Flask and its extensions
-from flask import Flask, render_template, request, redirect, url_for, flash, session
-from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
-# External libraries for data, AI, and scheduling
-from airtable import Airtable
-from google import genai
-from google.genai import types
-from apscheduler.schedulers.background import BackgroundScheduler
-import smtplib
-from email.message import EmailMessage
+  <style>
+    :root {
+      --bg: #fafafa;
+      --card: #ffffff;
+      --border: #e6e6e6;
+      --text: #333;
+      --muted: #666;
+      --primary: #0d6efd;
+    }
 
-# --- Environment Setup and Configuration ---
-load_dotenv()
+    body {
+      background: var(--bg);
+      font-family: "Inter", "Segoe UI", Arial, sans-serif;
+      color: var(--text);
+    }
 
-# Basic Configuration from .env
-AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY")
-AIRTABLE_BASE_ID = os.getenv("AIRTABLE_BASE_ID")
-AIRTABLE_TABLE_NAME = os.getenv("AIRTABLE_TABLE_NAME")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-SMTP_USER = os.getenv("SMTP_USER")
-SMTP_PASS = os.getenv("SMTP_PASS")
-EMAIL_FROM = os.getenv("EMAIL_FROM")
-FLASK_SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-default-key-shh")
+    /* Navigation */
+    .nav-container {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .nav-title { font-size: 18px; font-weight: 600; }
+    .user-info { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
+    .user-info img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
 
-# Initialize Logger
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    /* Dashboard Layout (New) */
+    .dashboard-layout {
+      display: flex;
+      max-width: 1200px; /* Wider max width for the whole app */
+      margin: 0 auto;
+      padding: 28px 12px 60px;
+    }
+    .sidebar {
+      width: 280px;
+      flex-shrink: 0;
+      margin-right: 28px;
+    }
+    .main-content {
+      flex-grow: 1;
+      min-width: 0; /* Important for flex to shrink content correctly */
+    }
 
-# --- Airtable and Gemini Clients Initialization ---
-try:
-    airtable = Airtable(AIRTABLE_BASE_ID, AIRTABLE_TABLE_NAME, api_key=AIRTABLE_API_KEY)
-except Exception as e:
-    logging.error(f"Airtable initialization failed: {e}")
-    airtable = None # Set to None if initialization fails
+    /* Mobile Responsiveness for Sidebar */
+    @media (max-width: 992px) {
+      .sidebar {
+        display: none; /* Hide sidebar on small screens */
+      }
+      .dashboard-layout {
+        padding: 28px 12px 60px;
+        display: block; /* Switch to single column */
+      }
+    }
 
-try:
-    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-except Exception as e:
-    logging.error(f"Gemini Client initialization failed: {e}. Check GEMINI_API_KEY.")
-    gemini_client = None
+    /* Card and List Styles */
+    .task-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      transition: border-color .2s ease, box-shadow .2s ease;
+    }
+    .task-card:hover { border-color: #d5d5d5; box-shadow: 0 2px 10px rgba(0,0,0,.04); }
+    .task-title { font-weight: 600; }
+    .task-muted { color: var(--muted); font-size: 13px; }
+    .completed { opacity: .55; text-decoration: line-through; }
+    .btn-primary-custom {
+      background: var(--primary);
+      border: 1px solid var(--primary);
+      color: #fff;
+    }
+    .btn-primary-custom:hover { background: #0048c6; border-color: #0048c6; }
+    .dtl { max-width: 210px; }
+    .card { border: 1px solid var(--border); border-radius: 8px; background: #fff; }
 
-# --- Flask App Setup ---
-app = Flask(__name__)
-app.secret_key = FLASK_SECRET_KEY
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
+    /* Calendar Widget Styles */
+    .calendar-widget {
+        padding: 16px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    .calendar-header {
+        font-weight: 600;
+        font-size: 16px;
+        margin-bottom: 10px;
+        color: var(--text);
+        text-align: center;
+    }
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        text-align: center;
+        font-size: 12px;
+    }
+    .calendar-day-header {
+        color: var(--muted);
+        padding-bottom: 4px;
+        font-weight: 600;
+    }
+    .calendar-day {
+        padding: 4px 0;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: background-color 0.2s;
+    }
+    .calendar-day:hover {
+        background-color: var(--bg);
+    }
+    .calendar-day.today {
+        background-color: var(--primary);
+        color: #fff;
+        font-weight: 700;
+        box-shadow: 0 2px 5px rgba(13, 108, 253, 0.4);
+    }
+  </style>
+</head>
+<body>
 
-# --- User Management (Simplified for Demo) ---
-class User(UserMixin):
-    """
-    A simplified user model. In a real app, this would query a database.
-    Since we don't have a user database, we use the email as the unique ID.
-    """
-    def __init__(self, id, name, email, picture=None):
-        self.id = id
-        self.name = name
-        self.email = email
-        self.picture = picture
+  <!-- NAV -->
+  <div class="nav-container">
+    <div class="nav-title">Your Task Planner</div>
+    <div class="user-info">
+      <span>{{ user.name }}</span>
+      {% if user.picture %}
+      <img src="{{ user.picture }}" alt="profile">
+      {% endif %}
+      <a class="btn btn-outline-secondary btn-sm" href="/logout">Logout</a>
+    </div>
+  </div>
 
-    def get_id(self):
-        return str(self.id)
+  <!-- MAIN DASHBOARD LAYOUT -->
+  <div class="dashboard-layout">
+    
+    <!-- SIDEBAR (Calendar & Stats) -->
+    <div class="sidebar">
+        
+        <!-- Calendar Widget (Static Placeholder) -->
+        <div class="calendar-widget">
+            <div class="calendar-header">November 2025</div>
+            <div class="calendar-grid">
+                <div class="calendar-day-header">Mo</div>
+                <div class="calendar-day-header">Tu</div>
+                <div class="calendar-day-header">We</div>
+                <div class="calendar-day-header">Th</div>
+                <div class="calendar-day-header">Fr</div>
+                <div class="calendar-day-header">Sa</div>
+                <div class="calendar-day-header" style="color: #dc3545;">Su</div>
+                <!-- Example days (November 2025 starts on a Saturday) -->
+                <div class="calendar-day" style="grid-column: 6;">1</div>
+                <div class="calendar-day" style="color: #dc3545;">2</div>
+                <div class="calendar-day">3</div>
+                <div class="calendar-day">4</div>
+                <div class="calendar-day">5</div>
+                <div class="calendar-day">6</div>
+                <div class="calendar-day">7</div>
+                <div class="calendar-day">8</div>
+                <div class="calendar-day" style="color: #dc3545;">9</div>
+                <div class="calendar-day">10</div>
+                <div class="calendar-day">11</div>
+                <div class="calendar-day">12</div>
+                <div class="calendar-day">13</div>
+                <div class="calendar-day">14</div>
+                <div class="calendar-day">15</div>
+                <div class="calendar-day" style="color: #dc3545;">16</div>
+                <div class="calendar-day">17</div>
+                <div class="calendar-day">18</div>
+                <div class="calendar-day">19</div>
+                <div class="calendar-day">20</div>
+                <div class="calendar-day">21</div>
+                <div class="calendar-day">22</div>
+                <div class="calendar-day" style="color: #dc3545;">23</div>
+                <div class="calendar-day">24</div>
+                <div class="calendar-day">25</div>
+                <div class="calendar-day">26</div>
+                <div class="calendar-day">27</div>
+                <div class="calendar-day">28</div>
+                <div class="calendar-day today">29</div> <!-- Set to 29 to represent today's date -->
+                <div class="calendar-day" style="color: #dc3545;">30</div>
+            </div>
+        </div>
+        
+        <!-- Quick Stats -->
+        <div class="card p-3">
+            <h6 class="mb-2">Task Summary</h6>
+            <div class="text-muted small">Total Tasks: <span class="fw-bold">{{ tasks|length }}</span></div>
+            <div class="text-muted small">Completed: <span class="text-success fw-bold">{{ tasks | selectattr('completed', 'equalto', true) | list | length }}</span></div>
+            <div class="text-muted small">Pending: <span class="text-danger fw-bold">{{ tasks | selectattr('completed', 'equalto', false) | list | length }}</span></div>
+        </div>
 
-# Mock User Database (simulating a basic user)
-MOCK_USER_DB = {
-    # The ID can be the email since it's unique
-    "john.doe@example.com": User(
-        id="john.doe@example.com",
-        name="John Doe",
-        email="john.doe@example.com",
-        picture="https://placehold.co/40x40/4c51bf/ffffff?text=JD"
-    )
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
+      
+      <!-- Display Flash Messages -->
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+              {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <h2>Hey {{ user.name.split(' ')[0] if user.name else 'there' }} 👋</h2>
+      <div class="text-muted mb-3">Add tasks, set reminders, mark complete. Emails fire automatically.</div>
+
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h4>Your Tasks</h4>
+        <button class="btn btn-primary-custom btn-sm" data-bs-toggle="modal" data-bs-target="#addTaskModal">Add Task</button>
+      </div>
+
+      <!-- TASK LIST -->
+      {% for task in tasks %}
+      <div class="task-card {% if task.completed %}completed{% endif %}">
+        <div class="row g-2 align-items-center">
+          <div class="col-md-6">
+            <div class="task-title">{{ task.task }}</div>
+            <div class="task-muted">{% if task.completed %}✔ Completed{% else %}⏳ Pending{% endif %}</div>
+
+            <form action="/update-time/{{ task.id }}" method="POST" class="d-flex align-items-center gap-2 mt-2">
+              <input type="datetime-local" name="reminder_time" 
+                     value="{{ task.raw_reminder_time | replace('Z', '') | truncate(16, True, '') }}" 
+                     class="form-control form-control-sm dtl">
+              <button class="btn btn-outline-secondary btn-sm">Save</button>
+            </form>
+          </div>
+
+          <!-- Delete and Complete Buttons -->
+          <div class="col-md-6 text-md-end d-flex justify-content-end align-items-center gap-2">
+            
+            <a href="/delete/{{ task.id }}" 
+               class="btn btn-outline-danger btn-sm" 
+               onclick="return confirm('Are you sure you want to delete the task: {{ task.task | e }}?');">
+               Delete
+            </a>
+
+            {% if not task.completed %}
+            <a href="/complete/{{ task.id }}" class="btn btn-primary-custom btn-sm">Mark Complete</a>
+            {% else %}
+            <span class="badge bg-success">Done</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+
+      {% if tasks|length == 0 %}
+      <div class="alert alert-light border text-center mt-3">No tasks yet. Click "Add Task" to create one.</div>
+      {% endif %}
+
+      <!-- ADD TASK MODAL -->
+      <div class="modal fade" id="addTaskModal" tabindex="-1">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Add Task</h5>
+              <button class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form action="/add-task" method="POST">
+              <div class="modal-body">
+                <label class="form-label">Task Name</label>
+                <input type="text" name="task_name" class="form-control mb-3" required>
+
+                <label class="form-label">Reminder Time</label>
+                <input type="datetime-local" name="reminder_time" class="form-control">
+              </div>
+
+              <div class="modal-footer">
+                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-primary-custom">Add Task</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI SECTION -->
+      <div class="card p-3 mt-4">
+        <h5>AI Assistant 🤖</h5>
+        <p class="text-muted">Ask anything. AI will help extract tasks or chat.</p>
+
+        <div class="input-group mb-2">
+          <input id="ai_input" class="form-control" placeholder="e.g., Remind me to study physics tomorrow at 4 PM">
+          <button class="btn btn-primary-custom" onclick="sendToAI()">Ask</button>
+        </div>
+
+        <pre id="ai_output" class="p-2 bg-light" style="min-height:100px; white-space: pre-wrap;"></pre>
+      </div>
+
+    </div> <!-- End Main Content -->
+
+  </div> <!-- End Dashboard Layout -->
+
+    
+  <script>
+async function sendToAI() {
+    const text = document.getElementById("ai_input").value;
+    const aiOutput = document.getElementById("ai_output");
+    aiOutput.innerText = "Processing...";
+
+    try {
+        const res = await fetch("/ai-process", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_input: text })
+        });
+
+        const data = await res.json();
+
+        // If AI returns an error → show it
+        if (data.type === "error") {
+            aiOutput.innerText = "❌ Error:\n" + (data.message || JSON.stringify(data, null, 2));
+            return;
+        }
+
+        // If AI returns a general conversation → show it
+        if (data.action !== "add") {
+             // For general chat, display the response cleanly
+            const chatResponse = data.response || JSON.stringify(data, null, 2);
+            aiOutput.innerText = "🤖 Assistant:\n" + chatResponse;
+            return;
+        }
+
+        // If AI successfully added a task
+        // Clean up the ISO string for display (remove Z and milliseconds)
+        const timeDisplay = data.reminder_time 
+            ? data.reminder_time.replace('Z', '').substring(0, 16) 
+            : 'None';
+            
+        aiOutput.innerText =
+            "✅ Task added:\n" +
+            "Task: " + data.task + "\n" +
+            "Time (UTC): " + timeDisplay;
+
+        // Refresh automatically to show the new task
+        setTimeout(() => {
+            window.location.reload();
+        }, 800);
+        
+    } catch (e) {
+        aiOutput.innerText = "❌ Network or unexpected error: " + e.message;
+    }
 }
+</script>
 
-@login_manager.user_loader
-def load_user(user_id):
-    """Load user from the ID stored in the session."""
-    return MOCK_USER_DB.get(user_id)
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
-# --- Utility Functions ---
-
-def serialize_task(record):
-    """Converts an Airtable record into a standardized Python dictionary."""
-    fields = record['fields']
-    # Parse Airtable's ISO 8601 date string (which is often in UTC)
-    raw_time = fields.get('Reminder Time')
-
-    # Convert to a more friendly format if it exists
-    if raw_time:
-        try:
-            # We assume Airtable stores it as an ISO string, which Flask/Jinja can handle
-            # We don't convert to local time here to keep it simple, but a real app would need timezone conversion
-            reminder_time_str = raw_time
-        except Exception:
-             reminder_time_str = None
-    else:
-        reminder_time_str = None
-
-    return {
-        'id': record['id'],
-        'task': fields.get('Task Name', 'Untitled Task'),
-        'completed': fields.get('Completed', False),
-        'raw_reminder_time': reminder_time_str,
-        'user_email': fields.get('Email') # Used for ownership checks
-    }
-
-def get_tasks_for_user(email):
-    """Fetches tasks owned by the specified email from Airtable."""
-    if not airtable:
-        flash("Database connection error. Check Airtable configuration.", "danger")
-        return []
-
-    # CRUCIAL: Filter tasks by the currently logged-in user's email for security
-    formula = f"{{Email}} = '{email}'"
-    try:
-        tasks_raw = airtable.get_all(formula=formula)
-        tasks = [serialize_task(t) for t in tasks_raw]
-        # Sort pending tasks first, then completed ones
-        tasks.sort(key=lambda t: (t['completed'], t['raw_reminder_time'] or "z"))
-        return tasks
-    except Exception as e:
-        logging.error(f"Error fetching tasks for {email}: {e}")
-        flash(f"Error fetching tasks: {e}", "danger")
-        return []
-
-def check_task_ownership(task_id, required_user_email):
-    """Checks if a task belongs to the given user."""
-    if not airtable: return False
-
-    try:
-        task_record = airtable.get(task_id)
-        task_data = serialize_task(task_record)
-        return task_data['user_email'] == required_user_email
-    except Exception:
-        return False
-
-# --- AI Helper Function with Structured Output ---
-
-def ask_ai_gemini(prompt: str, user_email: str):
-    """
-    Sends a query to the Gemini model and tries to enforce a structured JSON response
-    for task-related inputs.
-    """
-    if not gemini_client:
-        return {"action": "chat", "response": "AI services are currently unavailable (API key missing).", "type": "error"}
-
-    # Define the desired JSON structure for task extraction
-    response_schema = types.Schema(
-        type=types.Type.OBJECT,
-        properties={
-            "action": types.Schema(type=types.Type.STRING, description="Must be 'add' if a task and time are found, otherwise 'chat'."),
-            "task": types.Schema(type=types.Type.STRING, description="The name of the task to be added. Only required if action is 'add'."),
-            "reminder_time": types.Schema(type=types.Type.STRING, description="The reminder time in ISO 8601 format (e.g., 2025-11-29T16:00:00Z). Only required if action is 'add'."),
-            "response": types.Schema(type=types.Type.STRING, description="A friendly, conversational response to the user. Always include this.")
-        },
-        required=["action", "response"]
-    )
-
-    system_instruction = (
-        "You are an intelligent task assistant. "
-        "Analyze the user's input. If the input contains a clear task and a due date/time, set 'action' to 'add', "
-        "extract the task name into 'task', and convert the date/time into an ISO 8601 string in **UTC** (e.g., 2025-11-29T16:00:00Z) for 'reminder_time'. "
-        "If the input is a general question or chat, set 'action' to 'chat' and leave 'task' and 'reminder_time' empty. "
-        "Your output MUST be a JSON object conforming to the provided schema. The 'response' field must always be present and conversational."
-    )
-    
-    # We include the current time to ground the AI's date calculations
-    current_utc_time = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
-    
-    full_prompt = (
-        f"The current date and time (UTC) is: {current_utc_time}. "
-        f"The user's local timezone is assumed to be UTC for simplicity. "
-        f"User query: '{prompt}'"
-    )
-
-    try:
-        response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=full_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                response_mime_type="application/json",
-                response_schema=response_schema
-            )
-        )
-
-        # The response text will be a guaranteed JSON string
-        json_text = response.text
-        data = json.loads(json_text)
-        
-        # If the action is 'add', proceed to create the task
-        if data.get('action') == 'add' and data.get('task') and data.get('reminder_time'):
-            # Airtable expects an ISO string
-            fields = {
-                'Task Name': data['task'],
-                'Reminder Time': data['reminder_time'],
-                'Completed': False,
-                'Email': user_email
-            }
-            airtable.insert(fields)
-            data["type"] = "success"
-        
-        # Always return the structured data (even if it's just a 'chat' response)
-        return data
-
-    except json.JSONDecodeError:
-        logging.error("AI response was not valid JSON.")
-        return {"action": "chat", "response": "Sorry, I had trouble parsing the structured response. Please try again.", "type": "error"}
-    except Exception as e:
-        logging.error(f"Error during Gemini API call or task insertion: {e}")
-        return {"action": "chat", "response": f"An unexpected error occurred: {str(e)}", "type": "error"}
-
-# --- Scheduler and Email Functions ---
-
-def send_email_notification(recipient_email, task_name, due_time):
-    """Sends a reminder email."""
-    if not all([SMTP_USER, SMTP_PASS, EMAIL_FROM]):
-        logging.error("SMTP credentials are not configured. Cannot send email.")
-        return
-
-    msg = EmailMessage()
-    msg['Subject'] = f"⏰ Task Reminder: {task_name}"
-    msg['From'] = EMAIL_FROM
-    msg['To'] = recipient_email
-    msg.set_content(
-        f"Hello,\n\nThis is a friendly reminder that your task:\n\n"
-        f"'{task_name}'\n\nis due soon or has a reminder set for {due_time} (UTC).\n\n"
-        f"Stay productive!"
-    )
-
-    try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(SMTP_USER, SMTP_PASS)
-            server.send_message(msg)
-        logging.info(f"Reminder email sent to {recipient_email} for task: {task_name}")
-    except Exception as e:
-        logging.error(f"Failed to send email to {recipient_email}: {e}")
-
-def notify_due_tasks():
-    """
-    Background job that checks Airtable for tasks due in the next 15 minutes
-    and sends email reminders.
-    """
-    logging.info("Running background task check for due tasks...")
-    
-    if not airtable:
-        logging.warning("Airtable client is not initialized. Skipping scheduler run.")
-        return
-        
-    # Define the time window for reminders: now up to 15 minutes from now.
-    now_utc = datetime.now(timezone.utc)
-    future_utc = now_utc + timedelta(minutes=15)
-    
-    # We will fetch all pending tasks and filter them in memory
-    # A more advanced Airtable query could use `IS_AFTER` but it's complex for ranges.
-    formula = "{Completed} = 0"
-    
-    try:
-        tasks_raw = airtable.get_all(formula=formula)
-        
-        for record in tasks_raw:
-            fields = record['fields']
-            raw_time = fields.get('Reminder Time')
-            task_name = fields.get('Task Name')
-            user_email = fields.get('Email')
-
-            if raw_time and task_name and user_email:
-                try:
-                    # Airtable's ISO string (e.g., '2025-11-29T16:00:00.000Z')
-                    reminder_dt_utc = datetime.fromisoformat(raw_time.replace('Z', '+00:00'))
-
-                    # Check if the reminder is within the 15-minute window
-                    if now_utc <= reminder_dt_utc < future_utc:
-                        send_email_notification(
-                            recipient_email=user_email,
-                            task_name=task_name,
-                            due_time=reminder_dt_utc.strftime('%Y-%m-%d %H:%M UTC')
-                        )
-                        # Optional: Mark reminder sent in Airtable if needed to prevent re-sending
-                        # airtable.update(record['id'], {'Reminder Sent': True})
-                except ValueError as e:
-                    logging.warning(f"Skipping task {record['id']} due to bad date format: {raw_time}. Error: {e}")
-                
-    except Exception as e:
-        logging.error(f"Error during background task check: {e}")
-
-
-# --- Routes ---
-
-# 1. Authentication Routes
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    """Handles simple email-based login."""
-    if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
-
-    if request.method == 'POST':
-        email = request.form.get('email').strip().lower()
-        # In a real app, you'd check password hash here.
-        # For this demo, we just check if the email is in our mock DB.
-        user = MOCK_USER_DB.get(email)
-        
-        if user:
-            login_user(user)
-            flash('Logged in successfully!', 'success')
-            return redirect(url_for('dashboard'))
-        else:
-            flash('Invalid email. Please use john.doe@example.com for this demo.', 'danger')
-    
-    # Simple login page HTML
-    return render_template('login.html') # NOTE: This template is not provided here, but assumed to exist.
-
-@app.route('/logout')
-@login_required
-def logout():
-    """Logs out the current user."""
-    logout_user()
-    flash('You have been logged out.', 'info')
-    return redirect(url_for('login'))
-
-# 2. Main Dashboard Route
-@app.route('/')
-@app.route('/dashboard')
-@login_required
-def dashboard():
-    """Displays the user's tasks and the main UI."""
-    tasks = get_tasks_for_user(current_user.email)
-    return render_template('index.html', tasks=tasks, user=current_user)
-
-# 3. Task Management Routes
-@app.route('/add-task', methods=['POST'])
-@login_required
-def add_task():
-    """Adds a new task to Airtable."""
-    task_name = request.form.get('task_name')
-    reminder_time_local = request.form.get('reminder_time')
-
-    if not task_name:
-        flash("Task name cannot be empty.", "warning")
-        return redirect(url_for('dashboard'))
-
-    # Prepare data for Airtable
-    fields = {
-        'Task Name': task_name,
-        'Completed': False,
-        'Email': current_user.email
-    }
-
-    # Only set Reminder Time if the user provided one
-    if reminder_time_local:
-        try:
-            # Convert the local time input to UTC ISO 8601 string for Airtable
-            # We assume the input time is in the server's local timezone for this simple demo
-            # A production app needs to handle user-specific timezones
-            dt_obj_local = datetime.fromisoformat(reminder_time_local)
-            
-            # This is a simplification. Assuming local time = UTC for this demo's storage simplicity.
-            # For robustness, we should ideally treat the input as naive and let the user know it's UTC.
-            fields['Reminder Time'] = dt_obj_local.isoformat() + "Z" # Append Z for UTC interpretation
-
-        except ValueError:
-            flash("Invalid date/time format. Task added without reminder.", "warning")
-
-    try:
-        airtable.insert(fields)
-        flash(f"Task '{task_name}' added successfully!", "success")
-    except Exception as e:
-        flash(f"Error adding task: {e}", "danger")
-
-    return redirect(url_for('dashboard'))
-
-@app.route('/complete/<task_id>')
-@login_required
-def complete_task(task_id):
-    """Marks a task as completed."""
-    if not check_task_ownership(task_id, current_user.email):
-        flash("You are not authorized to modify this task.", "danger")
-        return redirect(url_for('dashboard'))
-
-    try:
-        airtable.update(task_id, {'Completed': True})
-        flash('Task marked as complete!', 'success')
-    except Exception as e:
-        flash(f"Error completing task: {e}", "danger")
-
-    return redirect(url_for('dashboard'))
-
-@app.route('/delete/<task_id>')
-@login_required
-def delete_task(task_id):
-    """Deletes a task."""
-    if not check_task_ownership(task_id, current_user.email):
-        flash("You are not authorized to delete this task.", "danger")
-        return redirect(url_for('dashboard'))
-
-    try:
-        airtable.delete(task_id)
-        flash('Task deleted successfully!', 'success')
-    except Exception as e:
-        flash(f"Error deleting task: {e}", "danger")
-
-    return redirect(url_for('dashboard'))
-
-@app.route('/update-time/<task_id>', methods=['POST'])
-@login_required
-def update_time(task_id):
-    """Updates the reminder time for an existing task."""
-    new_reminder_time_local = request.form.get('reminder_time')
-
-    if not check_task_ownership(task_id, current_user.email):
-        flash("You are not authorized to modify this task.", "danger")
-        return redirect(url_for('dashboard'))
-
-    try:
-        # Prepare for Airtable update
-        update_fields = {}
-        if new_reminder_time_local:
-            # Convert to UTC ISO 8601 string
-            dt_obj_local = datetime.fromisoformat(new_reminder_time_local)
-            update_fields['Reminder Time'] = dt_obj_local.isoformat() + "Z"
-        else:
-            # If the field is cleared
-            update_fields['Reminder Time'] = None
-
-        airtable.update(task_id, update_fields)
-        flash('Reminder time updated successfully!', 'success')
-
-    except ValueError:
-        flash("Invalid date/time format provided.", "warning")
-    except Exception as e:
-        flash(f"Error updating time: {e}", "danger")
-
-    return redirect(url_for('dashboard'))
-
-
-# 4. AI Interaction Route
-@app.route('/ai-process', methods=['POST'])
-@login_required
-def ai_process():
-    """Receives user input and sends it to Gemini for processing."""
-    try:
-        data = request.get_json()
-        user_input = data.get('user_input')
-        
-        if not user_input:
-            return app.response_class(
-                response=json.dumps({"type": "error", "message": "Input cannot be empty."}),
-                status=400,
-                mimetype='application/json'
-            )
-            
-        ai_result = ask_ai_gemini(user_input, current_user.email)
-        
-        # Ensure the response is a valid JSON object
-        return app.response_class(
-            response=json.dumps(ai_result),
-            status=200,
-            mimetype='application/json'
-        )
-
-    except Exception as e:
-        logging.error(f"AI Process Route Error: {e}")
-        return app.response_class(
-            response=json.dumps({"type": "error", "message": f"Server processing error: {e}"}),
-            status=500,
-            mimetype='application/json'
-        )
-
-
-# --- Application Entry Point ---
-if __name__ == '__main__':
-    # Initialize and start the scheduler for email reminders
-    scheduler = BackgroundScheduler(daemon=True)
-    # Schedule the job to run every 10 minutes
-    scheduler.add_job(notify_due_tasks, 'interval', minutes=10) 
-    scheduler.start()
-    
-    # Run the Flask application
-    app.run(debug=True, use_reloader=False) # use_reloader=False because APScheduler causes issues with Flask's reloader
+</body>
+</html>
