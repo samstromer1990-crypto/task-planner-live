@@ -331,7 +331,7 @@ def logout():
 def dashboard():
     """Displays the user's tasks and the main UI."""
     tasks = get_tasks_for_user(current_user.email)
-    return render_template('dashboard.html', tasks=tasks, user=current_user)
+    return render_template('index.html', tasks=tasks, user=current_user)
 
 # 3. Task Management Routes
 @app.route('/add-task', methods=['POST'])
@@ -483,4 +483,5 @@ if __name__ == '__main__':
     
     # Run the Flask application
     app.run(debug=True, use_reloader=False) # use_reloader=False because APScheduler causes issues with Flask's reloader
+
 
