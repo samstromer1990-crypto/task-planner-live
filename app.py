@@ -10,8 +10,7 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 
 # External libraries for data, AI, and scheduling
 from airtable import Airtable
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 from apscheduler.schedulers.background import BackgroundScheduler
 import smtplib
 from email.message import EmailMessage
@@ -40,10 +39,11 @@ except Exception as e:
     airtable = None # Set to None if initialization fails
 
 try:
-    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+    genai.configure(api_key=GEMINI_API_KEY)
+    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
 except Exception as e:
     logging.error(f"Gemini Client initialization failed: {e}. Check GEMINI_API_KEY.")
-    gemini_client = None
+    gemini_model = None
 
 # --- Flask App Setup ---
 app = Flask(__name__)
@@ -141,26 +141,37 @@ def check_task_ownership(task_id, required_user_email):
         return False
 
 # --- AI Helper Function with Structured Output ---
-
 def ask_ai_gemini(prompt: str, user_email: str):
     """
     Sends a query to the Gemini model and tries to enforce a structured JSON response
     for task-related inputs.
     """
-    if not gemini_client:
+    if not gemini_model:
         return {"action": "chat", "response": "AI services are currently unavailable (API key missing).", "type": "error"}
 
-    # Define the desired JSON structure for task extraction
-    response_schema = types.Schema(
-        type=types.Type.OBJECT,
-        properties={
-            "action": types.Schema(type=types.Type.STRING, description="Must be 'add' if a task and time are found, otherwise 'chat'."),
-            "task": types.Schema(type=types.Type.STRING, description="The name of the task to be added. Only required if action is 'add'."),
-            "reminder_time": types.Schema(type=types.Type.STRING, description="The reminder time in ISO 8601 format (e.g., 2025-11-29T16:00:00Z). Only required if action is 'add'."),
-            "response": types.Schema(type=types.Type.STRING, description="A friendly, conversational response to the user. Always include this.")
+    # Define the desired JSON structure for task extraction using the older API format
+    response_schema = {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "description": "Must be 'add' if a task and time are found, otherwise 'chat'."
+            },
+            "task": {
+                "type": "string",
+                "description": "The name of the task to be added. Only required if action is 'add'."
+            },
+            "reminder_time": {
+                "type": "string",
+                "description": "The reminder time in ISO 8601 format (e.g., 2025-11-29T16:00:00Z). Only required if action is 'add'."
+            },
+            "response": {
+                "type": "string",
+                "description": "A friendly, conversational response to the user. Always include this."
+            }
         },
-        required=["action", "response"]
-    )
+        "required": ["action", "response"]
+    }
 
     system_instruction = (
         "You are an intelligent task assistant. "
@@ -180,14 +191,16 @@ def ask_ai_gemini(prompt: str, user_email: str):
     )
 
     try:
-        response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=full_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                response_mime_type="application/json",
-                response_schema=response_schema
-            )
+        # Use the older API format - pass config as dict
+        generation_config = genai.types.GenerationConfig(
+            response_mime_type="application/json",
+            response_schema=response_schema
+        )
+        
+        response = gemini_model.generate_content(
+            full_prompt,
+            generation_config=generation_config,
+            system_instruction=system_instruction
         )
 
         # The response text will be a guaranteed JSON string
@@ -209,6 +222,12 @@ def ask_ai_gemini(prompt: str, user_email: str):
         # Always return the structured data (even if it's just a 'chat' response)
         return data
 
+    except json.JSONDecodeError:
+        logging.error("AI response was not valid JSON.")
+        return {"action": "chat", "response": "Sorry, I had trouble parsing the structured response. Please try again.", "type": "error"}
+    except Exception as e:
+        logging.error(f"Error during Gemini API call or task insertion: {e}")
+        return {"action": "chat", "response": f"An unexpected error occurred: {str(e)}", "type": "error"}
     except json.JSONDecodeError:
         logging.error("AI response was not valid JSON.")
         return {"action": "chat", "response": "Sorry, I had trouble parsing the structured response. Please try again.", "type": "error"}
@@ -483,6 +502,7 @@ if __name__ == '__main__':
     
     # Run the Flask application
     app.run(debug=True, use_reloader=False) # use_reloader=False because APScheduler causes issues with Flask's reloader
+
 
 
 
