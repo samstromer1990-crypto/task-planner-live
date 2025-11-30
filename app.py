@@ -587,6 +587,7 @@ scheduler.add_job(notify_due_tasks, IntervalTrigger(minutes=5), id="notify_due_t
 scheduler.start()
 
 # ---------------------- Start ----------------------
-if _name_ == "_main_":
+if __name__ == "_main_":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
 
