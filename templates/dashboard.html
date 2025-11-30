@@ -10,35 +10,24 @@
 
   <style>
     :root {
-      --bg-light: #f4f4f6;
-      --bg-dark: #1e1e2f;
-      --card-light: rgba(255, 255, 255, 0.2);
-      --card-dark: rgba(40, 40, 60, 0.6);
-      --text-light: #1e1e2f;
-      --text-dark: #e0e0e0;
-      --muted-light: #666;
-      --muted-dark: #aaa;
+      --bg: #fafafa;
+      --card: #ffffff;
+      --border: #e6e6e6;
+      --text: #333;
+      --muted: #666;
       --primary: #0d6efd;
-      --shadow: rgba(0, 0, 0, 0.12);
-      --transition: 0.3s ease;
     }
 
     body {
-      background: var(--bg-light);
-      color: var(--text-light);
+      background: var(--bg);
       font-family: "Inter", "Segoe UI", Arial, sans-serif;
-      transition: background var(--transition), color var(--transition);
+      color: var(--text);
     }
 
-    body.dark-mode {
-      background: var(--bg-dark);
-      color: var(--text-dark);
-    }
-
-    /* NAVIGATION */
+    /* Navigation */
     .nav-container {
-      background: var(--card-light);
-      border-bottom: 1px solid rgba(255,255,255,0.2);
+      background: #fff;
+      border-bottom: 1px solid var(--border);
       padding: 12px 24px;
       display: flex;
       justify-content: space-between;
@@ -46,204 +35,287 @@
       position: sticky;
       top: 0;
       z-index: 100;
-      backdrop-filter: blur(10px);
-      box-shadow: 0 4px 12px var(--shadow);
-      border-radius: 0 0 12px 12px;
-      transition: all var(--transition);
-    }
-    body.dark-mode .nav-container {
-      background: var(--card-dark);
-      border-color: rgba(255,255,255,0.1);
     }
     .nav-title { font-size: 18px; font-weight: 600; }
-    .user-info { display: flex; align-items: center; gap: 10px; font-size: 14px; transition: color var(--transition); }
-    body.dark-mode .user-info { color: var(--muted-dark); }
+    .user-info { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
     .user-info img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
 
-    /* DASHBOARD LAYOUT */
-    .dashboard-layout { display: flex; max-width: 1200px; margin: 0 auto; padding: 28px 12px 60px; transition: all var(--transition); }
-    .sidebar { width: 280px; flex-shrink: 0; margin-right: 28px; }
-    .main-content { flex-grow: 1; min-width: 0; }
-
-    @media (max-width: 992px) { .sidebar { display: none; } .dashboard-layout { display: block; } }
-
-    /* TASK CARDS & GENERAL CARDS */
-    .task-card, .card {
-      background: var(--card-light);
-      border-radius: 16px;
-      padding: 16px;
-      margin-bottom: 14px;
-      backdrop-filter: blur(10px);
-      box-shadow: 0 8px 24px var(--shadow);
-      border: 1px solid rgba(255,255,255,0.2);
-      transition: all var(--transition);
+    /* Dashboard Layout (New) */
+    .dashboard-layout {
+      display: flex;
+      max-width: 1200px; /* Wider max width for the whole app */
+      margin: 0 auto;
+      padding: 28px 12px 60px;
     }
-    body.dark-mode .task-card, body.dark-mode .card {
-      background: var(--card-dark);
-      border: 1px solid rgba(255,255,255,0.1);
+    .sidebar {
+      width: 280px;
+      flex-shrink: 0;
+      margin-right: 28px;
+    }
+    .main-content {
+      flex-grow: 1;
+      min-width: 0; /* Important for flex to shrink content correctly */
     }
 
-    .task-card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px var(--shadow); }
+    /* Mobile Responsiveness for Sidebar */
+    @media (max-width: 992px) {
+      .sidebar {
+        display: none; /* Hide sidebar on small screens */
+      }
+      .dashboard-layout {
+        padding: 28px 12px 60px;
+        display: block; /* Switch to single column */
+      }
+    }
+
+    /* Card and List Styles */
+    .task-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      transition: border-color .2s ease, box-shadow .2s ease;
+    }
+    .task-card:hover { border-color: #d5d5d5; box-shadow: 0 2px 10px rgba(0,0,0,.04); }
     .task-title { font-weight: 600; }
-    .task-muted { font-size: 13px; color: var(--muted-light); transition: color var(--transition); }
-    body.dark-mode .task-muted { color: var(--muted-dark); }
-    .completed { opacity: 0.6; text-decoration: line-through; }
-
+    .task-muted { color: var(--muted); font-size: 13px; }
+    .completed { opacity: .55; text-decoration: line-through; }
     .btn-primary-custom {
       background: var(--primary);
       border: 1px solid var(--primary);
       color: #fff;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      transition: all var(--transition);
     }
     .btn-primary-custom:hover { background: #0048c6; border-color: #0048c6; }
-
     .dtl { max-width: 210px; }
+    .card { border: 1px solid var(--border); border-radius: 8px; background: #fff; }
 
-    /* CALENDAR */
+    /* Calendar Widget Styles */
     .calendar-widget {
-      padding: 16px;
-      background: var(--card-light);
-      border-radius: 16px;
-      backdrop-filter: blur(10px);
-      box-shadow: 0 8px 24px var(--shadow);
-      margin-bottom: 20px;
-      transition: background var(--transition), color var(--transition);
+        padding: 16px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        margin-bottom: 20px;
     }
-    body.dark-mode .calendar-widget { background: var(--card-dark); }
-
-    .calendar-header { font-weight: 600; font-size: 16px; margin-bottom: 10px; text-align: center; }
-    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 12px; }
-    .calendar-day-header { color: var(--muted-light); font-weight: 600; padding-bottom: 4px; }
-    body.dark-mode .calendar-day-header { color: var(--muted-dark); }
-
+    .calendar-header {
+        font-weight: 600;
+        font-size: 16px;
+        margin-bottom: 10px;
+        color: var(--text);
+        text-align: center;
+    }
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        text-align: center;
+        font-size: 12px;
+    }
+    .calendar-day-header {
+        color: var(--muted);
+        padding-bottom: 4px;
+        font-weight: 600;
+    }
     .calendar-day {
-      padding: 6px 0;
-      cursor: pointer;
-      border-radius: 8px;
-      transition: all var(--transition);
+        padding: 4px 0;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: background-color 0.2s;
     }
-    .calendar-day:hover { background-color: #e0e0ff; }
-    body.dark-mode .calendar-day:hover { background-color: #3a3a60; }
-
+    .calendar-day:hover {
+        background-color: var(--bg);
+    }
     .calendar-day.today {
-      background-color: var(--primary);
-      color: #fff;
-      font-weight: 700;
-      box-shadow: 0 2px 6px rgba(13, 108, 253, 0.4);
-    }
-
-    /* AI Assistant */
-    #ai_output {
-      border-radius: 12px;
-      background: rgba(248,249,250,0.6);
-      backdrop-filter: blur(8px);
-      padding: 12px;
-      min-height: 100px;
-      transition: background var(--transition), color var(--transition);
-    }
-    body.dark-mode #ai_output { background: rgba(40,40,60,0.5); color: var(--text-dark); }
-
-    /* ADD TASK MODAL (Glassmorphic) */
-    .modal-content {
-      background: rgba(255,255,255,0.15);
-      backdrop-filter: blur(12px);
-      border-radius: 20px;
-      border: 1px solid rgba(255,255,255,0.2);
-      box-shadow: 0 12px 32px rgba(0,0,0,0.15);
-      transition: all 0.3s ease;
-    }
-    body.dark-mode .modal-content {
-      background: rgba(40,40,60,0.6);
-      border-color: rgba(255,255,255,0.1);
-    }
-    .modal-header { border-bottom: none; justify-content: space-between; padding: 1.2rem 1.5rem; }
-    .modal-title { font-weight: 600; font-size: 18px; }
-    .btn-close { filter: brightness(0.7); transition: filter 0.2s; }
-    .btn-close:hover { filter: brightness(1); }
-
-    .modal-body input {
-      background: rgba(255,255,255,0.2);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 12px;
-      padding: 10px 12px;
-      width: 100%;
-      color: inherit;
-      transition: all 0.3s ease;
-    }
-    body.dark-mode .modal-body input {
-      background: rgba(40,40,60,0.5);
-      border-color: rgba(255,255,255,0.1);
-      color: #e0e0e0;
-    }
-    .modal-body input:focus {
-      outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 8px var(--primary);
-    }
-
-    .modal-footer .btn-outline-secondary {
-      background: rgba(255,255,255,0.1);
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.2);
-      color: inherit;
-      transition: all 0.3s;
-      padding: 6px 16px;
-    }
-    .modal-footer .btn-outline-secondary:hover {
-      background: rgba(255,255,255,0.2);
-      border-color: var(--primary);
-    }
-    .modal-footer .btn-primary-custom {
-      border-radius: 12px;
-      padding: 6px 18px;
-      box-shadow: 0 6px 16px rgba(0,0,0,0.15);
-    }
-
-    /* DARK MODE TOGGLE BUTTON */
-    #darkModeToggle {
-      cursor: pointer;
-      padding: 8px 14px;
-      border-radius: 12px;
-      border: 1px solid rgba(0,0,0,0.1);
-      background: var(--card-light);
-      font-size: 14px;
-      box-shadow: 0 4px 12px var(--shadow);
-      transition: all var(--transition);
-    }
-    body.dark-mode #darkModeToggle {
-      background: var(--card-dark);
-      border-color: rgba(255,255,255,0.1);
-      color: var(--text-dark);
+        background-color: var(--primary);
+        color: #fff;
+        font-weight: 700;
+        box-shadow: 0 2px 5px rgba(13, 108, 253, 0.4);
     }
   </style>
 </head>
 <body>
 
-<!-- NAV, DASHBOARD, TASKS, MODAL, AI assistant remain unchanged -->
+  <!-- NAV -->
+  <div class="nav-container">
+    <div class="nav-title">Your Task Planner</div>
+    <div class="user-info">
+      <span>{{ user.name }}</span>
+      {% if user.picture %}
+      <img src="{{ user.picture }}" alt="profile">
+      {% endif %}
+      <a class="btn btn-outline-secondary btn-sm" href="/logout">Logout</a>
+    </div>
+  </div>
 
-<!-- Dark Mode Toggle Button -->
-<div style="position: fixed; bottom: 20px; right: 20px; z-index: 999;">
-  <div id="darkModeToggle">🌙 Toggle Dark Mode</div>
-</div>
+  <!-- MAIN DASHBOARD LAYOUT -->
+  <div class="dashboard-layout">
+    
+    <!-- SIDEBAR (Calendar & Stats) -->
+    <div class="sidebar">
+        
+        <!-- Calendar Widget (Static Placeholder) -->
+        <div class="calendar-widget">
+            <div class="calendar-header">November 2025</div>
+            <div class="calendar-grid">
+                <div class="calendar-day-header">Mo</div>
+                <div class="calendar-day-header">Tu</div>
+                <div class="calendar-day-header">We</div>
+                <div class="calendar-day-header">Th</div>
+                <div class="calendar-day-header">Fr</div>
+                <div class="calendar-day-header">Sa</div>
+                <div class="calendar-day-header" style="color: #dc3545;">Su</div>
+                <!-- Example days (November 2025 starts on a Saturday) -->
+                <div class="calendar-day" style="grid-column: 6;">1</div>
+                <div class="calendar-day" style="color: #dc3545;">2</div>
+                <div class="calendar-day">3</div>
+                <div class="calendar-day">4</div>
+                <div class="calendar-day">5</div>
+                <div class="calendar-day">6</div>
+                <div class="calendar-day">7</div>
+                <div class="calendar-day">8</div>
+                <div class="calendar-day" style="color: #dc3545;">9</div>
+                <div class="calendar-day">10</div>
+                <div class="calendar-day">11</div>
+                <div class="calendar-day">12</div>
+                <div class="calendar-day">13</div>
+                <div class="calendar-day">14</div>
+                <div class="calendar-day">15</div>
+                <div class="calendar-day" style="color: #dc3545;">16</div>
+                <div class="calendar-day">17</div>
+                <div class="calendar-day">18</div>
+                <div class="calendar-day">19</div>
+                <div class="calendar-day">20</div>
+                <div class="calendar-day">21</div>
+                <div class="calendar-day">22</div>
+                <div class="calendar-day" style="color: #dc3545;">23</div>
+                <div class="calendar-day">24</div>
+                <div class="calendar-day">25</div>
+                <div class="calendar-day">26</div>
+                <div class="calendar-day">27</div>
+                <div class="calendar-day">28</div>
+                <div class="calendar-day today">29</div> <!-- Set to 29 to represent today's date -->
+                <div class="calendar-day" style="color: #dc3545;">30</div>
+            </div>
+        </div>
+        
+        <!-- Quick Stats -->
+        <div class="card p-3">
+            <h6 class="mb-2">Task Summary</h6>
+            <div class="text-muted small">Total Tasks: <span class="fw-bold">{{ tasks|length }}</span></div>
+            <div class="text-muted small">Completed: <span class="text-success fw-bold">{{ tasks | selectattr('completed', 'equalto', true) | list | length }}</span></div>
+            <div class="text-muted small">Pending: <span class="text-danger fw-bold">{{ tasks | selectattr('completed', 'equalto', false) | list | length }}</span></div>
+        </div>
 
-<script>
-  const toggle = document.getElementById('darkModeToggle');
-  toggle.addEventListener('click', () => {
-      document.body.classList.toggle('dark-mode');
-      localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
-  });
+    </div>
 
-  // Load preference
-  if(localStorage.getItem('darkMode') === 'true') {
-      document.body.classList.add('dark-mode');
-  }
-</script>
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
+      
+      <!-- Display Flash Messages -->
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+              {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script>
+      <h2>Hey {{ user.name.split(' ')[0] if user.name else 'there' }} 👋</h2>
+      <div class="text-muted mb-3">Add tasks, set reminders, mark complete. Emails fire automatically.</div>
+
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h4>Your Tasks</h4>
+        <button class="btn btn-primary-custom btn-sm" data-bs-toggle="modal" data-bs-target="#addTaskModal">Add Task</button>
+      </div>
+
+      <!-- TASK LIST -->
+      {% for task in tasks %}
+      <div class="task-card {% if task.completed %}completed{% endif %}">
+        <div class="row g-2 align-items-center">
+          <div class="col-md-6">
+            <div class="task-title">{{ task.task }}</div>
+            <div class="task-muted">{% if task.completed %}✔ Completed{% else %}⏳ Pending{% endif %}</div>
+
+            <form action="/update-time/{{ task.id }}" method="POST" class="d-flex align-items-center gap-2 mt-2">
+              <input type="datetime-local" name="reminder_time" 
+                     value="{{ task.raw_reminder_time | replace('Z', '') | truncate(16, True, '') }}" 
+                     class="form-control form-control-sm dtl">
+              <button class="btn btn-outline-secondary btn-sm">Save</button>
+            </form>
+          </div>
+
+          <!-- Delete and Complete Buttons -->
+          <div class="col-md-6 text-md-end d-flex justify-content-end align-items-center gap-2">
+            
+            <a href="/delete/{{ task.id }}" 
+               class="btn btn-outline-danger btn-sm" 
+               onclick="return confirm('Are you sure you want to delete the task: {{ task.task | e }}?');">
+               Delete
+            </a>
+
+            {% if not task.completed %}
+            <a href="/complete/{{ task.id }}" class="btn btn-primary-custom btn-sm">Mark Complete</a>
+            {% else %}
+            <span class="badge bg-success">Done</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+
+      {% if tasks|length == 0 %}
+      <div class="alert alert-light border text-center mt-3">No tasks yet. Click "Add Task" to create one.</div>
+      {% endif %}
+
+      <!-- ADD TASK MODAL -->
+      <div class="modal fade" id="addTaskModal" tabindex="-1">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Add Task</h5>
+              <button class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form action="/add-task" method="POST">
+              <div class="modal-body">
+                <label class="form-label">Task Name</label>
+                <input type="text" name="task_name" class="form-control mb-3" required>
+
+                <label class="form-label">Reminder Time</label>
+                <input type="datetime-local" name="reminder_time" class="form-control">
+              </div>
+
+              <div class="modal-footer">
+                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-primary-custom">Add Task</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI SECTION -->
+      <div class="card p-3 mt-4">
+        <h5>AI Assistant 🤖</h5>
+        <p class="text-muted">Ask anything. AI will help extract tasks or chat.</p>
+
+        <div class="input-group mb-2">
+          <input id="ai_input" class="form-control" placeholder="e.g., Remind me to study physics tomorrow at 4 PM">
+          <button class="btn btn-primary-custom" onclick="sendToAI()">Ask</button>
+        </div>
+
+        <pre id="ai_output" class="p-2 bg-light" style="min-height:100px; white-space: pre-wrap;"></pre>
+      </div>
+
+    </div> <!-- End Main Content -->
+
+  </div> <!-- End Dashboard Layout -->
+
+    
+  <script>
 async function sendToAI() {
     const text = document.getElementById("ai_input").value;
     const aiOutput = document.getElementById("ai_output");
@@ -258,25 +330,43 @@ async function sendToAI() {
 
         const data = await res.json();
 
+        // If AI returns an error → show it
         if (data.type === "error") {
             aiOutput.innerText = "❌ Error:\n" + (data.message || JSON.stringify(data, null, 2));
             return;
         }
 
+        // If AI returns a general conversation → show it
         if (data.action !== "add") {
+             // For general chat, display the response cleanly
             const chatResponse = data.response || JSON.stringify(data, null, 2);
             aiOutput.innerText = "🤖 Assistant:\n" + chatResponse;
             return;
         }
 
-        const timeDisplay = data.reminder_time ? data.reminder_time.replace('Z', '').substring(0,16) : 'None';
-        aiOutput.innerText = "✅ Task added:\nTask: " + data.task + "\nTime (UTC): " + timeDisplay;
-        setTimeout(() => { window.location.reload(); }, 800);
+        // If AI successfully added a task
+        // Clean up the ISO string for display (remove Z and milliseconds)
+        const timeDisplay = data.reminder_time 
+            ? data.reminder_time.replace('Z', '').substring(0, 16) 
+            : 'None';
+            
+        aiOutput.innerText =
+            "✅ Task added:\n" +
+            "Task: " + data.task + "\n" +
+            "Time (UTC): " + timeDisplay;
+
+        // Refresh automatically to show the new task
+        setTimeout(() => {
+            window.location.reload();
+        }, 800);
+        
     } catch (e) {
         aiOutput.innerText = "❌ Network or unexpected error: " + e.message;
     }
 }
 </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 </body>
 </html>
