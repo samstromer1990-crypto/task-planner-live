@@ -61,65 +61,75 @@
         <div class="calendar-widget">
            <div id="calendar-header" class="calendar-header"></div>
            <div class="calendar-grid" id="calendar-grid">
-                <div class="calendar-day-header">Mon</div>
-                <div class="calendar-day-header">Tue</div>
-                <div class="calendar-day-header">Wed</div>
-                <div class="calendar-day-header">Thu</div>
-                <div class="calendar-day-header">Fri</div>
-                <div class="calendar-day-header">Sat</div>
-                <div class="calendar-day-header" style="color: #dc3545;">Sun</div>
+                <div class="calendar-day-header">Mo</div>
+                <div class="calendar-day-header">Tu</div>
+                <div class="calendar-day-header">We</div>
+                <div class="calendar-day-header">Th</div>
+                <div class="calendar-day-header">Fr</div>
+                <div class="calendar-day-header">Sa</div>
+                <div class="calendar-day-header" style="color: #dc3545;">Su</div>
            </div>
-      
-         <div class="calendar-grid" id="calendar-grid"></div>
         </div>
-            
+
         <script>
-       function buildCalendar() {
-          const now = new Date();
-          const year = now.getFullYear();
-          const month = now.getMonth();
-          
-          const monthNames = [
-             "January","February","March","April","May","June",
-             "July","August","September","October","November","December"
-          ];
-                
-          document.getElementById("calendar-header").innerText =
-               `${monthNames[month]} ${year}`;
-          
-          const grid = document.getElementById("calendar-grid");
-          grid.innerHTML = ""; // clear all days
+        function buildCalendar() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth();
             
-          const firstDay = new Date(year, month, 1);
-          let start = firstDay.getDay();
-          if (start === 0) start = 7;
-           
-          const daysInMonth = new Date(year, month + 1, 0).getDate();
-          
-          // Empty cells
-          for (let i = 1; i < start; i++) {
-             const empty = document.createElement("div");
-             empty.className = "calendar-day empty";
-             grid.appendChild(empty);
-          } 
-          
-          // Actual days
-          for (let d = 1; d <= daysInMonth; d++) {
-              const div = document.createElement("div");
-              div.className = "calendar-day";
-              div.textContent = d;
-               
-              if (d === now.getDate()) div.classList.add("today");
+            const monthNames = [
+                  "January","February","March","April","May","June",
+                  "July","August","September","October","November","December"
+            ];
+                
+            document.getElementById("calendar-header").textContent =
+                `${monthNames[month]} ${year}`;
+                
+            const grid = document.getElementById("calendar-grid");
+            
+            // Remove old days (keep headers)
+            grid.querySelectorAll(".calendar-day").forEach(el => el.remove());
               
-              const index = (start - 1) + (d - 1);
-              if (index % 7 === 6) div.style.color = "#dc3545";
-               
-              grid.appendChild(div);
-          }
-       }
-       buildCalendar();
+            const firstDay = new Date(year, month, 1);
+            let start = firstDay.getDay();  // 0=Sun, 1=Mon, ...
+            if (start === 0) start = 7;     // Move Sunday to end (ISO format)
+             
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+             
+            // Empty cells before day 1
+            for (let i = 1; i < start; i++) {
+                 let empty = document.createElement("div");
+                 empty.className = "calendar-day";
+                 empty.style.visibility = "hidden";
+                 grid.appendChild(empty);
+            }
+              
+             // Fill actual days
+             for (let d = 1; d <= daysInMonth; d++) {
+                  const div = document.createElement("div");
+                  div.className = "calendar-day";
+                  div.textContent = d;
+                   
+                  if (
+                     d === now.getDate() &&
+                     month === now.getMonth() &&
+                     year === now.getFullYear()
+                  ) {
+                     div.classList.add("today");
+                  }
+                
+                  // Sundays red
+                  const cellIndex = (start - 1) + (d - 1);
+                  if ((cellIndex % 7) === 6) {
+                       div.style.color = "#dc3545";
+                  }
+                   
+                  grid.appendChild(div);
+             }
+        }
         
-       </script>
+        buildCalendar();
+        </script>
         
         
         <!-- PIE CHART for Completion % -->
@@ -171,12 +181,12 @@
 
             <!-- FIXED: IST Timezone Display -->
             <div class="task-muted small mt-1 ist-time">
-              Due: <span data-utc="{{ task.raw_reminder_time }}">{{ task.raw_reminder_time | replace('Z', '') | truncate(16, True, '') }}</span>
+              Due: <span data-ist="{{ task.raw_reminder_time }}">{{ task.raw_reminder_time | replace('Z', '') | replace('+05:30', '') | truncate(16, True, '') }}</span>
             </div>
 
             <form action="/update-time/{{ task.id }}" method="POST" class="d-flex align-items-center gap-2 mt-2">
               <input type="datetime-local" name="reminder_time" 
-                     value="{{ task.raw_reminder_time | replace('Z', '') | truncate(16, True, '') }}" 
+                     value="{{ task.formatted_reminder_time }}" 
                      class="form-control form-control-sm dtl">
               <button class="btn btn-outline-secondary btn-sm">Save</button>
             </form>
@@ -281,14 +291,14 @@ async function sendToAI() {
         }
 
         const timeDisplay = data.reminder_time 
-            ? data.reminder_time.replace('Z', '').substring(0, 16) 
+            ? formatISTTime(data.reminder_time)
             : 'None';
             
         aiOutput.innerText =
             "✅ Task added:\n" +
             "Task: " + data.task + "\n" +
             "Category: " + (data.category || 'Uncategorized') + "\n" +
-            "Time (UTC): " + timeDisplay;
+            "Time (IST): " + timeDisplay;
 
         setTimeout(() => { window.location.reload(); }, 800);
         
@@ -300,38 +310,46 @@ async function sendToAI() {
 
   <!-- IST TIMEZONE & PIE CHART Script -->
   <script>
-// Convert UTC times to IST (UTC+5:30) for display
-function convertToIST(utcString) {
-    if (!utcString) return 'No reminder';
+// Format IST time for display (times are already in IST, just format nicely)
+function formatISTTime(istString) {
+    if (!istString) return 'No reminder';
     
     try {
-        // Parse UTC datetime
-        const utcDate = new Date(utcString);
+        // Parse the datetime string (could be UTC with Z, IST with +05:30, or naive)
+        let date;
+        if (istString.includes('+05:30')) {
+            // Already in IST format
+            date = new Date(istString);
+        } else if (istString.endsWith('Z')) {
+            // UTC format - convert to IST
+            const utcDate = new Date(istString);
+            const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
+            date = new Date(utcDate.getTime() + istOffset);
+        } else {
+            // Assume it's already in local/IST time
+            date = new Date(istString);
+        }
         
-        // Add 5 hours 30 minutes for IST
-        const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
-        const istDate = new Date(utcDate.getTime() + istOffset);
-        
-        // Format as DD-MM-YYYY HH:MM
-        const day = String(istDate.getDate()).padStart(2, '0');
-        const month = String(istDate.getMonth() + 1).padStart(2, '0');
-        const year = istDate.getFullYear();
-        const hours = String(istDate.getHours()).padStart(2, '0');
-        const minutes = String(istDate.getMinutes()).padStart(2, '0');
+        // Format as DD-MM-YYYY HH:MM IST
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
         
         return `${day}-${month}-${year} ${hours}:${minutes} IST`;
     } catch (e) {
-        return utcString; // Fallback if parsing fails
+        return istString; // Fallback if parsing fails
     }
 }
 
-// Apply IST conversion to all task times when page loads
+// Apply IST formatting to all task times when page loads
 document.addEventListener('DOMContentLoaded', function() {
     const timeElements = document.querySelectorAll('.ist-time span');
     timeElements.forEach(el => {
-        const utcTime = el.getAttribute('data-utc');
-        if (utcTime) {
-            el.textContent = `Due: ${convertToIST(utcTime)}`;
+        const istTime = el.getAttribute('data-ist');
+        if (istTime) {
+            el.textContent = formatISTTime(istTime);
         }
     });
 });
@@ -413,7 +431,6 @@ document.addEventListener('DOMContentLoaded', loadCharts);
 
 </body>
 </html>
-
 
 
 
