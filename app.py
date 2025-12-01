@@ -586,8 +586,61 @@ scheduler = BackgroundScheduler(timezone="UTC")
 scheduler.add_job(notify_due_tasks, IntervalTrigger(minutes=5), id="notify_due_tasks", replace_existing=True)
 scheduler.start()
 
+
+
+
+# ---------------------- Calendar tasks ----------------------
+
+  
+@app.route("/get_tasks")
+def get_tasks():
+    if "user" not in session:
+        return jsonify([])
+
+    user_email = session["user"]["email"]
+    url = airtable_url()
+
+    if not url:
+        return jsonify([])
+
+    params = {
+        "filterByFormula": f"{{Email}} = '{user_email}'"
+    }
+
+    try:
+        r = requests.get(url, headers=at_headers(), params=params, timeout=15)
+        records = r.json().get("records", [])
+    except Exception as e:
+        app.logger.error(f"/get_tasks Airtable error: {e}")
+        return jsonify([])
+
+    result = []
+    for rec in records:
+        f = rec.get("fields", {})
+        reminder = f.get("Reminder Local", None)
+
+        # Convert ISO timestamp → YYYY-MM-DD
+        date_only = None
+        if reminder:
+            try:
+                date_only = reminder.split("T")[0]
+            except:
+                date_only = None
+
+        result.append({
+            "id": rec.get("id"),
+            "task": f.get("Task Name", ""),
+            "date": date_only,       # 👈 calendar needs this
+            "completed": f.get("Completed", False),
+            "category": f.get("Category", "Uncategorized"),
+        })
+
+    return jsonify(result)
+
+
 # ---------------------- Start ----------------------
-if __name__ == "_main_":
+if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
 
 
