@@ -165,17 +165,49 @@ def ask_ai(user_text):
         return {"type": "error", "message": "No input provided."}
     return ask_ai_gemini(user_text)
 
+# ---------------------- Timezone helpers ----------------------
+IST_TZ = timezone(timedelta(hours=5, minutes=30))
+
+def convert_datetime_local_to_ist(dt_string):
+    """Convert datetime-local (YYYY-MM-DDTHH:MM) to IST ISO format."""
+    if not dt_string:
+        return None
+    try:
+        dt = datetime.fromisoformat(dt_string.split('+')[0].split('.')[0].replace('Z', ''))
+        return dt.replace(tzinfo=IST_TZ).isoformat()
+    except:
+        return dt_string
+
+def format_ist_for_datetime_local(ist_string):
+    """Convert IST ISO string to datetime-local format (YYYY-MM-DDTHH:MM)."""
+    if not ist_string:
+        return ""
+    try:
+        if 'Z' in ist_string:
+            dt = datetime.fromisoformat(ist_string.replace('Z', '+00:00')).astimezone(IST_TZ)
+            return dt.isoformat().split('+')[0][:16]
+        return ist_string.split('+')[0].split('.')[0][:16]
+    except:
+        return ist_string.split('+')[0].split('.')[0][:16] if ist_string else ""
+
 # ---------------------- Natural language date parser ----------------------
 def parse_natural_date(text):
     if not text:
         return None
+    # Parse in IST timezone (UTC+5:30)
     dt = dateparser.parse(
         text,
-        settings={"TIMEZONE": "UTC", "RETURN_AS_TIMEZONE_AWARE": True, "PREFER_DATES_FROM": "future"}
+        settings={"TIMEZONE": "Asia/Kolkata", "RETURN_AS_TIMEZONE_AWARE": True, "PREFER_DATES_FROM": "future"}
     )
     if not dt:
         return None
-    return dt.isoformat().replace('+00:00', 'Z')
+    # If timezone-aware, convert to IST; otherwise assume IST
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=IST_TZ)
+    else:
+        dt = dt.astimezone(IST_TZ)
+    # Return in ISO format with IST offset (+05:30)
+    return dt.isoformat()
 
 # ---------------------- AI processing endpoint ----------------------
 @app.route("/ai-process", methods=["POST"])
@@ -304,11 +336,15 @@ def dashboard():
 
     tasks = []
     for r in records:
+        raw_time = r.get("fields", {}).get("Reminder Local", "")
+        # Format time for datetime-local input (IST format)
+        formatted_time = format_ist_for_datetime_local(raw_time) if raw_time else ""
         tasks.append({
             "id": r.get("id"),
             "task": r.get("fields", {}).get("Task Name", ""),
             "completed": r.get("fields", {}).get("Completed", False),
-            "raw_reminder_time": r.get("fields", {}).get("Reminder Local", ""),
+            "raw_reminder_time": raw_time,
+            "formatted_reminder_time": formatted_time,  # For datetime-local input
             "category": r.get("fields", {}).get("Category", "Uncategorized"),  # FIXED: Add category
         })
 
@@ -321,23 +357,28 @@ def add_task():
         return "Not logged in", 403
         
     task_name = request.form.get("task_name")
-    reminder_time = request.form.get("reminder_time")
+    reminder_time_raw = request.form.get("reminder_time")
     category = request.form.get("category", "Personal")  # FIXED: Accept category
     user_email = session['user'].get("email")
+    
+    # Convert datetime-local to IST format
+    reminder_time = convert_datetime_local_to_ist(reminder_time_raw) if reminder_time_raw else None
     
     url = airtable_url()
     if not url:
         return "Airtable not configured", 500
 
-    payload = {
-        "fields": {
-            "Task Name": task_name,
-            "Completed": False,
-            "Reminder Local": reminder_time,
-            "Email": user_email,
-            "Category": category  # FIXED: Save category
-        }
+    fields = {
+        "Task Name": task_name,
+        "Completed": False,
+        "Email": user_email,
+        "Category": category  # FIXED: Save category
     }
+    
+    if reminder_time:
+        fields["Reminder Local"] = reminder_time
+    
+    payload = {"fields": fields}
     
     try:
         resp = requests.post(url, json=payload, headers=at_headers(json=True), timeout=15)
@@ -381,10 +422,16 @@ def update_time(record_id):
     if not is_owner:
         return error_msg or "Unauthorized", 403
         
-    new_time = request.form.get("reminder_time")
+    new_time_raw = request.form.get("reminder_time")
+    # Convert datetime-local to IST format
+    new_time = convert_datetime_local_to_ist(new_time_raw) if new_time_raw else None
+    
     url = airtable_url()
     if not url:
         return "Airtable not configured", 500
+    
+    if not new_time:
+        return "Invalid time format", 400
         
     resp = requests.patch(f"{url}/{record_id}", json={"fields": {"Reminder Local": new_time}}, headers=at_headers(json=True), timeout=15)
     
@@ -405,7 +452,7 @@ def send_reminder_email(task_name, reminder_time, recipient_email):
     msg["From"] = EMAIL_FROM
     msg["To"] = recipient_email
     msg["Subject"] = f"⏰ Reminder: {task_name}"
-    msg.attach(MIMEText(f"Task: {task_name}\nTime (UTC): {reminder_time}", "plain"))
+    msg.attach(MIMEText(f"Task: {task_name}\nTime (IST): {reminder_time}", "plain"))
 
     try:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
