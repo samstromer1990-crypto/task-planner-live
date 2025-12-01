@@ -2,13 +2,17 @@ from dotenv import load_dotenv
 import os
 import urllib.parse
 import requests
-import smtplib
 import json
-import dateparser
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from datetime import datetime, timezone, timedelta
 import logging
+from datetime import datetime, timezone, timedelta
+
+# Optional dependency: dateparser (used for natural‑language dates)
+try:
+    import dateparser  # type: ignore
+    HAS_DATEPARSER = True
+except Exception:
+    dateparser = None  # type: ignore
+    HAS_DATEPARSER = False
 
 from flask import Flask, redirect, url_for, session, render_template, request, jsonify
 from authlib.integrations.flask_client import OAuth
@@ -28,14 +32,6 @@ app.secret_key = os.getenv("SECRET_KEY", os.urandom(24).hex())
 AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY")
 AIRTABLE_BASE_ID = os.getenv("AIRTABLE_BASE_ID")
 AIRTABLE_TABLE_NAME = os.getenv("AIRTABLE_TABLE_NAME", "Tasks")
-
-# Email (SMTP) - FIXED: Support both old and new env var names
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER") or os.getenv("EMAIL_USER")
-SMTP_PASS = os.getenv("SMTP_PASS") or os.getenv("EMAIL_PASS")
-EMAIL_FROM = os.getenv("EMAIL_FROM") or SMTP_USER or os.getenv("EMAIL_USER")
-EMAIL_TO = os.getenv("EMAIL_TO")
 
 # Google OAuth (Authlib)
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
@@ -175,38 +171,46 @@ def convert_datetime_local_to_ist(dt_string):
     try:
         dt = datetime.fromisoformat(dt_string.split('+')[0].split('.')[0].replace('Z', ''))
         return dt.replace(tzinfo=IST_TZ).isoformat()
-    except:
+    except Exception:
         return dt_string
 
 def format_ist_for_datetime_local(ist_string):
-    """Convert IST ISO string to datetime-local format (YYYY-MM-DDTHH:MM)."""
+    """Convert IST/UTC ISO string to datetime-local format (YYYY-MM-DDTHH:MM)."""
     if not ist_string:
         return ""
     try:
         if 'Z' in ist_string:
+            # UTC → IST, then strip timezone
             dt = datetime.fromisoformat(ist_string.replace('Z', '+00:00')).astimezone(IST_TZ)
             return dt.isoformat().split('+')[0][:16]
+        # Already has +05:30 or no tz → just cut to minutes
         return ist_string.split('+')[0].split('.')[0][:16]
-    except:
+    except Exception:
         return ist_string.split('+')[0].split('.')[0][:16] if ist_string else ""
 
 # ---------------------- Natural language date parser ----------------------
 def parse_natural_date(text):
-    if not text:
+    """Parse natural‑language date text into IST ISO string, if dateparser is available."""
+    if not text or not HAS_DATEPARSER:
         return None
-    # Parse in IST timezone (UTC+5:30)
-    dt = dateparser.parse(
-        text,
-        settings={"TIMEZONE": "Asia/Kolkata", "RETURN_AS_TIMEZONE_AWARE": True, "PREFER_DATES_FROM": "future"}
-    )
+    try:
+        dt = dateparser.parse(  # type: ignore[call-arg]
+            text,
+            settings={
+                "TIMEZONE": "Asia/Kolkata",
+                "RETURN_AS_TIMEZONE_AWARE": True,
+                "PREFER_DATES_FROM": "future",
+            },
+        )
+    except Exception:
+        return None
+
     if not dt:
         return None
-    # If timezone-aware, convert to IST; otherwise assume IST
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=IST_TZ)
     else:
         dt = dt.astimezone(IST_TZ)
-    # Return in ISO format with IST offset (+05:30)
     return dt.isoformat()
 
 # ---------------------- AI processing endpoint ----------------------
@@ -441,91 +445,47 @@ def update_time(record_id):
         
     return redirect("/dashboard")
 
-# ---------------------- Email reminder system ----------------------
-def send_reminder_email(task_name, reminder_time, recipient_email):
-    # FIXED: Added fallback for missing email in task record
-    if not recipient_email:
-        recipient_email = EMAIL_TO
-        app.logger.warning(f"No email in task '{task_name}', using default: {recipient_email}")
-    
-    msg = MIMEMultipart()
-    msg["From"] = EMAIL_FROM
-    msg["To"] = recipient_email
-    msg["Subject"] = f"⏰ Reminder: {task_name}"
-    msg.attach(MIMEText(f"Task: {task_name}\nTime (IST): {reminder_time}", "plain"))
 
-    try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.send_message(msg)
-        app.logger.info(f"✅ Email sent to {recipient_email} for task: {task_name}")
-        return True
-    except Exception as e:
-        app.logger.error(f"SMTP send error to {recipient_email}: {e}")
-        return False
-
-# FIXED: Added comprehensive logging and error handling
+# ---------------------- Reminder checker (no email) ----------------------
 def notify_due_tasks():
-    """Checks Airtable for due tasks that haven't been notified in the last 1 minute."""
-    app.logger.info("🔔 Running due task notification check...")
-    
+    """
+    Checks Airtable for due tasks and just logs them.
+    (Email sending has been disabled to avoid SMTP configuration.)
+    """
+    app.logger.info("🔔 Running due task notification check (logging only, no email)...")
+
     url = airtable_url()
     if not url:
         app.logger.error("❌ Airtable URL not configured")
         return
-    
+
     formula = """
     AND(
       {Completed}=0,
-      {Reminder Local} <= NOW(),
-      OR(
-        {Last Notified At}=BLANK(),
-        DATETIME_DIFF(NOW(), {Last Notified At}, 'minutes') >= 1
-      )
+      {Reminder Local} <= NOW()
     )
     """
     params = {"filterByFormula": formula.replace("\n", "")}
-    records = []
-    
+
     try:
         r = requests.get(url, headers=at_headers(), params=params, timeout=15)
         r.raise_for_status()
         records = r.json().get("records", [])
-        app.logger.info(f"📋 Found {len(records)} potential tasks to notify")
+        app.logger.info(f"📋 Found {len(records)} due tasks (logging only).")
     except Exception as e:
         app.logger.error(f"❌ Airtable fetch error: {e}")
         return
-            
+
     for rec in records:
         fields = rec.get("fields", {})
         task_name = fields.get("Task Name", "Task")
         reminder_time = fields.get("Reminder Local", "")
-        recipient_email = fields.get("Email", "") or EMAIL_TO  # FIXED: Added fallback
-        record_id = rec['id']
-
-        if not recipient_email:
-            app.logger.warning(f"⚠ No email for task '{task_name}', skipping")
-            continue
-
-        app.logger.info(f"📧 Sending reminder for: {task_name} to {recipient_email}")
-        
-        if send_reminder_email(task_name, reminder_time, recipient_email):
-            try:
-                now_utc = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
-                patch_payload = {"fields": {"Last Notified At": now_utc}}
-                patch_resp = requests.patch(f"{url}/{record_id}", json=patch_payload, headers=at_headers(json=True))
-                patch_resp.raise_for_status()
-                app.logger.info(f"✅ Updated Last Notified At for {record_id}")
-            except Exception as e:
-                app.logger.error(f"❌ Failed to update notification timestamp: {e}")
-        else:
-            app.logger.error(f"❌ Failed to send email for task: {task_name}")
+        app.logger.info(f"⏰ Due task (no email sent): {task_name} at {reminder_time}")
 
 @app.route("/test-reminder")
 def test_reminder():
     notify_due_tasks()
-    return "Reminder check done ✅. Check server logs for details."
+    return "Reminder check done ✅ (logged only, no emails sent)."
 
 # ---------------------- Stats for charts ----------------------
 def fetch_all_records(email_filter=None):
@@ -627,14 +587,6 @@ def stats_json():
     
     app.logger.info(f"📈 Stats generated: {stats_data}")
     return jsonify(stats_data)
-
-# ---------------------- Scheduler ----------------------
-scheduler = BackgroundScheduler(timezone="UTC")
-scheduler.add_job(notify_due_tasks, IntervalTrigger(minutes=5), id="notify_due_tasks", replace_existing=True)
-scheduler.start()
-
-
-
 
 # ---------------------- Calendar tasks ----------------------
 
